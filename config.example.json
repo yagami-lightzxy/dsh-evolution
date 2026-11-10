@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "agent_name": "dsh",
+  "profile": "balanced",
+  "paths": {
+    "dsh_home": "~/.dsh",
+    "dsh_profile": "desktop",
+    "dsh_cli": "",
+    "agents_home": "~/.agents",
+    "claude_home": "~/.claude",
+    "codex_home": "~/.codex"
+  },
+  "skill_roots": [
+    {
+      "path": "<cwd>/.dsh/skills",
+      "rank": 100,
+      "agent": "dsh-project"
+    },
+    {
+      "path": "<cwd>/.agents/skills",
+      "rank": 200,
+      "agent": "shared-project"
+    },
+    {
+      "path": "~/.dsh/skills",
+      "rank": 400,
+      "agent": "dsh"
+    },
+    {
+      "path": "~/.agents/skills",
+      "rank": 500,
+      "agent": "shared"
+    },
+    {
+      "path": "~/.claude/skills",
+      "rank": 700,
+      "agent": "claude"
+    },
+    {
+      "path": "~/.codex/skills",
+      "rank": 700,
+      "agent": "codex"
+    }
+  ],
+  "install_targets": {
+    "dsh": "~/.dsh/skills/evolution",
+    "agents": "~/.agents/skills/evolution",
+    "claude": "~/.claude/skills/evolution",
+    "codex": "~/.codex/skills/evolution"
+  },
+  "rules": {
+    "agents_md": "~/.codex/AGENTS.md",
+    "agents_shared_md": "~/.agents/AGENTS.md",
+    "dsh_agents_md": "~/.dsh/AGENTS.md",
+    "claude_md": "~/.claude/CLAUDE.md",
+    "block_template": "templates/AGENTS.block.md",
+    "begin_marker": "<!-- EVOLUTION:BEGIN",
+    "end_marker": "<!-- EVOLUTION:END -->"
+  },
+  "envcheck": {
+    "enabled": true,
+    "hygiene_days": 30,
+    "grace_days": 7,
+    "include_backups": false,
+    "dsh_runtime_baseline": "",
+    "toolchain": [
+      {
+        "marker": "package.json",
+        "command": "node",
+        "install_hint": "winget install OpenJS.NodeJS.LTS"
+      },
+      {
+        "marker": "pyproject.toml",
+        "command": "python",
+        "install_hint": "winget install Python.Python.3.12"
+      },
+      {
+        "marker": "requirements.txt",
+        "command": "python",
+        "install_hint": "winget install Python.Python.3.12"
+      },
+      {
+        "marker": ".git",
+        "command": "git",
+        "install_hint": "winget install Git.Git"
+      }
+    ]
+  },
+  "review": {
+    "driver": "native",
+    "day": "SUN",
+    "time": "20:00",
+    "retention_days": 180,
+    "snapshot_retention_days": 90,
+    "metrics_retention_days": 365
+  },
+  "security": {
+    "online": false,
+    "max_scan_bytes": 1048576,
+    "max_files_per_skill": 400,
+    "fail_on": "high",
+    "accepted_risks": []
+  },
+  "metrics": {
+    "enabled": true,
+    "redact_task_labels": false
+  },
+  "maintenance": {
+    "enabled": true,
+    "auto_apply": true,
+    "scope": [
+      "skills",
+      "plugins"
+    ],
+    "dedupe_exact": true,
+    "quarantine_invalid": true,
+    "max_actions": 30,
+    "online": true,
+    "allow_download": true,
+    "install_queue": [],
+    "require_license": false,
+    "protected_skills": [
+      "evolution"
+    ],
+    "plugin_updates": "auto",
+    "backup_retention_days": 90
+  },
+  "upgrade_watch": [
+    {
+      "kind": "github",
+      "repo": "anthropics/skills",
+      "note": "Agent Skills 参考实现"
+    },
+    {
+      "kind": "github",
+      "repo": "openai/codex",
+      "note": "Codex CLI"
+    },
+    {
+      "kind": "github",
+      "repo": "modelcontextprotocol/servers",
+      "note": "MCP 参考服务器"
+    }
+  ],
+  "ignored_paths": [
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/__pycache__/**",
+    "**/.venv/**",
+    "**/dist/**",
+    "**/build/**"
+  ]
+}

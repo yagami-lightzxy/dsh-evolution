@@ -1,0 +1,20 @@
+{
+  "retentionDays": 90,
+  "quarantineDays": 30,
+  "reportRetentionDays": 180,
+  "maxLogMegabytes": 20,
+  "requiredToolRules": [
+    { "marker": "package.json", "command": "node", "wingetId": "OpenJS.NodeJS.LTS" },
+    { "marker": "pyproject.toml", "command": "python", "wingetId": "Python.Python.3.12" },
+    { "marker": "requirements.txt", "command": "python", "wingetId": "Python.Python.3.12" },
+    { "marker": ".git", "command": "git", "wingetId": "Git.Git" }
+  ],
+  "quarantineRoots": [
+    "work\\evolution-reports",
+    "work\\evolution-tmp"
+  ],
+  "pluginPolicy": {
+    "autoInstall": false,
+    "allowlist": []
+  }
+}

@@ -1,0 +1,36 @@
+# Copy to .github/workflows/evolution-weekly.yml
+# Weekly read-only audit; uploads reports as artifacts. No upgrades, no deletions.
+name: evolution-weekly
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # Monday 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Init evolution runtime
+        run: |
+          python scripts/evolution.py --home "$RUNNER_TEMP/evolution-home" init
+      - name: Weekly review (offline)
+        run: |
+          python scripts/evolution.py --home "$RUNNER_TEMP/evolution-home" review --fail-on high
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evolution-reports
+          path: |
+            ${{ runner.temp }}/evolution-home/reports/
+            ${{ runner.temp }}/evolution-home/state/review-latest.json
+          if-no-files-found: warn
