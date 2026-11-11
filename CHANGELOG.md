@@ -3,6 +3,12 @@
 All notable changes to `evolution` are documented here.
 Format: Keep a Changelog; versioning: SemVer.
 
+## [1.7.1] — 2026-11-11
+
+### Fixed
+
+- The managed `AGENTS.md` block now matches the compact 1.7 improvement loop instead of retaining the older 1.3 rules.
+
 ## [1.7.0] — 2026-11-11
 
 ### Added

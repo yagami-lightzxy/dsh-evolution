@@ -3,7 +3,7 @@ name: evolution
 description: "全局 Agent 自优化与能力管理：识别并移除拖累模型的旧技能和工具，从任务证据中复盘，按需安装或生成新能力，并用可量化验收决定是否晋级。"
 whenToUse: "当需要优化 Agent 或工作流、审计和清理技能/工具、同步跨 Agent 规则、执行周审阅、处理能力缺口、安装或生成技能，或评估技能变更是否真的变强时使用。普通一次性问答不加载完整实现。"
 metadata:
-  version: "1.7.0"
+  version: "1.7.1"
   license: "MIT"
   author: "DSH evolution"
   homepage: "~/.dsh/skills/evolution"
