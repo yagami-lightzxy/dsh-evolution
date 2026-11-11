@@ -257,6 +257,13 @@ class TestSnapshot(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             diff_snapshot(self.env.paths, "does-not-exist")
 
+    def test_snapshot_ids_do_not_collide_within_one_second(self) -> None:
+        first = create_snapshot(self.env.paths, label="same-second")
+        second = create_snapshot(self.env.paths, label="same-second")
+        self.assertNotEqual(first["id"], second["id"])
+        self.assertTrue((self.env.paths.snapshots_dir / first["id"] / "manifest.json").is_file())
+        self.assertTrue((self.env.paths.snapshots_dir / second["id"] / "manifest.json").is_file())
+
 
 class TestInstall(unittest.TestCase):
     def setUp(self) -> None:

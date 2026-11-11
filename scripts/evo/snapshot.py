@@ -82,8 +82,14 @@ def _managed_current(paths: Paths) -> dict[str, dict[str, Any]]:
 
 def create_snapshot(paths: Paths, *, label: str = "snapshot") -> dict[str, Any]:
     paths.ensure_runtime()
-    snapshot_id = _snapshot_id(label)
+    base_id = _snapshot_id(label)
+    snapshot_id = base_id
+    suffix = 1
     target = paths.snapshots_dir / snapshot_id
+    while target.exists():
+        snapshot_id = f"{base_id}-{suffix}"
+        suffix += 1
+        target = paths.snapshots_dir / snapshot_id
     files_dir = target / "files"
     files_dir.mkdir(parents=True, exist_ok=False)
     current = _managed_current(paths)

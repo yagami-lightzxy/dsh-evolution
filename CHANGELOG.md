@@ -3,6 +3,12 @@
 All notable changes to `evolution` are documented here.
 Format: Keep a Changelog; versioning: SemVer.
 
+## [1.7.3] — 2026-11-11
+
+### Fixed
+
+- Snapshot IDs now receive a suffix when repeated operations occur within the same second, so retries cannot collide with an existing snapshot directory.
+
 ## [1.7.2] — 2026-11-11
 
 ### Fixed
