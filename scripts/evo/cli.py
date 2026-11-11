@@ -15,6 +15,14 @@ from .cleanup import apply_cleanup, cleanup_markdown, plan_cleanup
 from .envcheck import run_envcheck, write_envcheck
 from .scaffold import create_skill, verify_markdown, verify_skill
 from .skill_health import run_skill_health, skill_health_markdown
+from .skill_sources import (
+    collect_entries,
+    plan_quarantine,
+    quarantine,
+    restore as restore_skill,
+    sources_markdown,
+    update_entry,
+)
 from .config import ensure_config, get, load_config, validate_config
 from .discover import discover_all
 from .frontmatter import load_skill, parse_frontmatter
@@ -429,6 +437,47 @@ def _verify(args: argparse.Namespace) -> int:
     result = verify_skill(args.path, command=command, timeout=float(args.timeout))
     _emit(args, result, verify_markdown(result))
     return 0 if result["ok"] else 1
+
+
+def _skills(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    cfg = _cfg(paths)
+    protected = {str(x) for x in (get(cfg, "maintenance.protected_skills", []) or [])}
+    entries = collect_entries(paths, cfg)
+
+    if args.restore:
+        data = restore_skill(paths, args.restore, apply=bool(args.apply))
+        human = [f"还原 {args.restore}：{'已移动' if data.get('applied') else ('演练' if data.get('dry_run') else '失败')}"]
+        for key in ("from", "to", "error"):
+            if data.get(key):
+                human.append(f"- {key}: {data[key]}")
+        _emit(args, data, "\n".join(human))
+        return 0 if data.get("applied") or data.get("dry_run") else 1
+
+    if args.update:
+        entry = next((e for e in entries if e["name"] == args.update), None)
+        if entry is None:
+            _err(f"找不到技能 {args.update}")
+            return 2
+        data = update_entry(paths, cfg, entry, apply=bool(args.apply))
+        human = [f"更新 {args.update}：{'完成' if data.get('installed') else ('演练' if data.get('dry_run') else '失败')}"]
+        if data.get("error"):
+            human.append(f"- 错误：{data['error']}")
+        if data.get("provenance"):
+            human.append(f"- 来源记录：{data['provenance']}")
+        _emit(args, data, "\n".join(human))
+        return 0 if data.get("ok") else 1
+
+    plan = plan_quarantine(entries, days=int(args.days), protected=protected) if args.quarantine_unused else None
+    applied: list[dict[str, Any]] = []
+    if plan is not None and args.apply:
+        with file_lock(paths.lock_file, timeout=60):
+            applied = [quarantine(paths, item, apply=True) for item in plan["candidates"]]
+    human = sources_markdown(entries, plan)
+    if plan is not None and not args.apply:
+        human += "\n这是演练；加 --apply 执行隔离。\n"
+    _emit(args, {"entries": entries, "plan": plan, "applied": applied}, human)
+    return 0
 
 
 def _maintain(args: argparse.Namespace) -> int:
@@ -1049,6 +1098,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--include-backups", action="store_true")
     p.add_argument("--no-logs", action="store_true")
     p.set_defaults(func=_cleanup)
+
+    p = sub.add_parser("skills", help="skill provenance, usage and reversible quarantine")
+    p.add_argument("--days", type=int, default=90, help="unused threshold in days")
+    p.add_argument("--quarantine-unused", action="store_true", help="list/apply quarantine for unused managed skills")
+    p.add_argument("--restore", default="", help="restore a quarantined skill by name")
+    p.add_argument("--update", default="", help="re-fetch one managed skill from its recorded source")
+    p.add_argument("--apply", action="store_true")
+    p.set_defaults(func=_skills)
 
     p = sub.add_parser("health", help="skill integrity and staleness check")
     p.add_argument("--days", type=int, default=0, help="staleness threshold in days (0 = config/default)")

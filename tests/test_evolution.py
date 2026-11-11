@@ -38,6 +38,13 @@ from evo.paths import build_paths  # noqa: E402
 from evo.review import run_review  # noqa: E402
 from evo.scaffold import create_skill, verify_skill  # noqa: E402
 from evo.skill_health import local_references, run_skill_health  # noqa: E402
+from evo.skill_sources import (  # noqa: E402
+    plan_quarantine,
+    quarantine,
+    restore as restore_skill,
+    update_entry,
+    usage_index,
+)
 from evo.snapshot import (  # noqa: E402
     create_snapshot,
     diff_snapshot,
@@ -859,6 +866,81 @@ class TestSkillHealthAndScaffold(unittest.TestCase):
         self.assertFalse(again["ok"])
         bad = create_skill(self.skills_root, "Bad_Name", "invalid name should be rejected outright", apply=False)
         self.assertFalse(bad["ok"])
+
+
+class TestSkillSources(unittest.TestCase):
+    """Nothing here deletes a skill; quarantine is the strongest action."""
+
+    def setUp(self) -> None:
+        self.env = Env()
+        self.skills = self.env.home / ".dsh" / "skills"
+
+    def tearDown(self) -> None:
+        self.env.cleanup()
+
+    def _entry(self, name: str, **over: object) -> dict:
+        base = {
+            "name": name,
+            "path": str(self.skills / name),
+            "managed": True,
+            "source": {"source": "github:owner/repo", "ref": "main"},
+            "age_days": 200.0,
+            "used_count": 0,
+            "last_used": "",
+            "protected": False,
+        }
+        base.update(over)
+        return base
+
+    def test_usage_index_reads_metrics(self) -> None:
+        self.env.paths.metrics_file.parent.mkdir(parents=True, exist_ok=True)
+        self.env.paths.metrics_file.write_text(
+            json.dumps({"ts": "2026-11-01T00:00:00+08:00", "skill": "alpha", "outcome": "success"}) + "\n"
+            + json.dumps({"ts": "2026-11-02T00:00:00+08:00", "skill": "alpha", "outcome": "success"}) + "\n"
+            + json.dumps({"ts": "2026-11-03T00:00:00+08:00", "task": "no skill"}) + "\n",
+            encoding="utf-8",
+        )
+        index = usage_index(self.env.paths)
+        self.assertEqual(index["alpha"]["count"], 2)
+        self.assertEqual(index["alpha"]["last"], "2026-11-02T00:00:00+08:00")
+
+    def test_quarantine_never_targets_handwritten_used_or_protected(self) -> None:
+        entries = [
+            self._entry("old-managed"),
+            self._entry("handwritten", managed=False),
+            self._entry("recently-used", used_count=3, last_used="2026-11-10"),
+            self._entry("guarded", protected=True),
+            self._entry("young", age_days=5.0),
+        ]
+        plan = plan_quarantine(entries, days=90)
+        names = [c["name"] for c in plan["candidates"]]
+        self.assertEqual(names, ["old-managed"])
+        kept = {k["name"]: k["why"] for k in plan["kept"]}
+        self.assertIn("手写", kept["handwritten"])
+        self.assertIn("使用记录", kept["recently-used"])
+        self.assertIn("受保护", kept["guarded"])
+
+    def test_quarantine_then_restore_roundtrip(self) -> None:
+        folder = self.env.add_skill("managed-old", "a managed skill that has not been touched in a while", "body")
+        (folder / ".evolution-source.json").write_text(
+            json.dumps({"schema": 1, "name": "managed-old", "source": {"source": "github:owner/repo"}}), encoding="utf-8"
+        )
+        data = quarantine(self.env.paths, {"name": "managed-old", "path": str(folder), "reason": "test"}, apply=True)
+        self.assertTrue(data["applied"])
+        self.assertFalse(folder.exists())
+        restored = restore_skill(self.env.paths, "managed-old", apply=True)
+        self.assertTrue(restored["applied"], restored)
+        self.assertTrue(folder.is_dir())
+        self.assertTrue((folder / "SKILL.md").is_file())
+
+    def test_restore_unknown_name_reports_missing(self) -> None:
+        data = restore_skill(self.env.paths, "never-existed", apply=True)
+        self.assertFalse(data["found"])
+
+    def test_update_refuses_without_source(self) -> None:
+        data = update_entry(self.env.paths, self.env.cfg, {"name": "local-only", "source": {}}, apply=False)
+        self.assertFalse(data["ok"])
+        self.assertIn("来源", data["error"])
 
 
 if __name__ == "__main__":

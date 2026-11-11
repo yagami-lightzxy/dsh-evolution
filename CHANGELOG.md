@@ -9,6 +9,26 @@ Format: Keep a Changelog; versioning: SemVer.
 - 每周先运行 envcheck 再评估能力：插件被宿主拒绝加载时，先升级或卸载该插件，再讨论是否新增工具；模型通道必须显式配置 reasoningEffort。
 
 
+## [1.6.0] — 2026-11-11
+
+### Added
+- **Skill provenance, usage and retirement** (skills command + evo/skill_sources.py):
+  reads each skill's .evolution-source.json, joins it with the metrics ledger, and reports source, age and use count.
+  Unused managed skills can be quarantined (moved to state/quarantine with a manifest) and restored byte-for-byte.
+  Hand-written skills and protected skills are never nominated. Nothing is ever deleted.
+- **Skill update from recorded source** (skills --update NAME --apply): re-fetches the recorded source/ref/subpath
+  through the existing fetch pipeline, which backs up the previous copy first.
+- 5 new tests (60 total).
+
+### Changed
+- The weekly flow can now retire and update skills, not just plugins: health finds broken ones, skills finds
+  unused ones, and both actions are reversible or reported with an explicit reason.
+
+### Notes
+- "Unused" is age plus the metrics ledger, because the host exposes no skill-invocation telemetry. No record
+  is not proof of no use, which is why the action is quarantine rather than deletion and requires --apply.
+
+
 ## [1.5.1] — 2026-11-11
 
 ### Added

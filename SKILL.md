@@ -3,7 +3,7 @@ name: evolution
 description: "全局 Agent 自优化与能力管理：任务开始前盘点并复用已有 Skill/MCP/插件/工具，判断能力缺口；维护跨 Agent 全局规则；审计环境、依赖、权限与供应链风险；执行每周审阅与升级评估；提供哈希快照、回滚、脱敏指标、导出导入和 MCP 接入。默认离线、最小权限、可验证，拒绝以节省资源为由敷衍任务。"
 whenToUse: "当用户要求优化 Agent 或工作流、审计/清理技能与工具、制定或同步全局规则、执行每周审阅、评估升级、封装跨 Agent 能力、排查能力缺口，或需要在多个 Agent（DSH/Claude Code/Codex 等）之间共享同一套规则时使用。普通代码或文档任务不必为加载本技能而停下，但其任务环与复用盘点可直接参照 references/task-loop.md。"
 metadata:
-  version: "1.5.1"
+  version: "1.6.0"
   license: "MIT"
   author: "DSH evolution"
   homepage: "~/.dsh/skills/evolution"
@@ -68,6 +68,9 @@ python scripts/evolution.py envcheck --online       # 追加 npm/EOL 版本核�
 python scripts/evolution.py cleanup                 # 断舍离演练（默认 dry-run）
 python scripts/evolution.py cleanup --apply         # 清理缓存/过期报告/日志
 python scripts/evolution.py health                  # 技能健康：引用失效/脚本坏/过期/缺版本
+python scripts/evolution.py skills --quarantine-unused   # 退役候选（只隔离，可还原）
+python scripts/evolution.py skills --update NAME --apply # 按来源重新拉取一个受管技能
+python scripts/evolution.py skills --restore NAME --apply
 python scripts/evolution.py new --name x --description "..." --with-script --with-tests --apply
 python scripts/evolution.py verify --path <skill>   # 验收闸门，可选 --command '["python","--version"]'
 python scripts/evolution.py plugins --online        # 插件升级候选

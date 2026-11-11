@@ -45,6 +45,28 @@ SKILL.md 体量、scripts 下每个 .py 能编译、json 能解析、正文引�
 - 一次性脚本不要包装成技能：放进项目 scripts/，用 README 说明，避免污染技能目录。
 - 需要新依赖时记录版本与来源，并在 verify 的冒烟命令里证明它能跑。
 
+## 更新与退役（v1.6.0）
+
+skill 也会过期，但"删掉不用的"这件事不能凭感觉。三条规则：
+
+1. **只隔离，不删除。** `skills --quarantine-unused --apply` 把候选移到
+   `state/quarantine/<时间>/<名字>`，带 manifest；`skills --restore <名字> --apply` 原样搬回。
+2. **只对"有来源"的技能动手。** `fetch` 安装时会写 `.evolution-source.json`；
+   手写技能没有来源可回装，永远不进候选。
+3. **"没用过"必须有依据。** 使用次数来自 `evolution record --skill` 的任务记录；
+   宿主不提供技能调用遥测，所以没有记录 ≠ 真的没用。默认阈值 90 天，且要求"零使用记录"。
+
+更新：`skills --update <名字> --apply` 按 provenance 里的 source/ref/subpath 重新 `fetch`，
+覆盖前备份、装完可 `verify`。没有来源记录的技能只能手动处理。
+
+~~~bash
+evolution skills                          # 来源、年龄、使用次数一览
+evolution skills --quarantine-unused      # 演练：谁会被隔离
+evolution skills --quarantine-unused --apply
+evolution skills --restore some-skill --apply
+evolution skills --update some-skill --apply
+~~~
+
 ## 反模式
 
 - 只写 SKILL.md、没有任何可执行证据，就直接说"能力已具备"。
