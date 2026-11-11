@@ -3,6 +3,12 @@
 All notable changes to `evolution` are documented here.
 Format: Keep a Changelog; versioning: SemVer.
 
+## [1.7.2] — 2026-11-11
+
+### Fixed
+
+- Weekly OS and cron schedules now invoke the full `improve --apply --online` loop, so scheduled runs include reflection and skill generation.
+
 ## [1.7.1] — 2026-11-11
 
 ### Fixed

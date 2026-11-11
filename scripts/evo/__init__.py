@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__version__ = "1.7.1"
+__version__ = "1.7.2"
 SCHEMA_VERSION = 1
 
 

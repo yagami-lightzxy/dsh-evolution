@@ -116,7 +116,7 @@ def _weekly_cmd(paths: Paths, cfg: dict[str, Any]) -> Path:
     cmd_path = paths.bin_dir / "weekly.cmd"
     content = (
         "@echo off\r\n"
-        f'"{python}" "{script}" review --quiet >> "{log}" 2>&1\r\n'
+        f'"{python}" "{script}" improve --apply --online --quiet >> "{log}" 2>&1\r\n'
     )
     cmd_path.write_text(content, encoding="utf-8", newline="")
     return cmd_path
@@ -162,7 +162,7 @@ def _os_install(paths: Paths, cfg: dict[str, Any], *, apply: bool) -> dict[str, 
         return {**state, "detail": detail, "exit_code": code}
     # POSIX cron
     script = paths.skill_dir / "scripts" / "evolution.py"
-    line = f'{time_value} * * {_cron_dow(day)} * "{sys.executable}" "{script}" review --quiet'
+    line = f'{time_value} * * {_cron_dow(day)} * "{sys.executable}" "{script}" improve --apply --online --quiet'
     block = f"{CRON_BEGIN}\n{line}\n{CRON_END}\n"
     current = _crontab_get()
     has = CRON_BEGIN in current
