@@ -28,6 +28,7 @@ envcheck 把这些变成可排序的发现项（finding），而不是"最近有
 | model_route | profile cordis.patch.yml | 缺 provider/model（high）；reasoningEffort 偏低（medium） |
 | web_tools | 同上，web 条目 | 未配置（skip）；否则仅展示 |
 | runtime_eol | sys.version / node --version + EOL 表 | 已 EOL（high）；180 天内到期（low） |
+| skill_health | 每个本地技能的正文引用、脚本编译、元数据、mtime | 引用失效/脚本编译失败（high）；长期未动/缺版本（medium/low） |
 | skill_shadow | 本地技能根 vs 插件内置 SKILL.md | 同名覆盖（info，秩 400 覆盖秩 600） |
 | heartbeat | 周报/审计/体检文件时间 | 无周报（medium）；>14 天（medium）；>28 天（high） |
 | hygiene | ~/.dsh 备份、字节码缓存、sessions/logs 体量 | 备份残留/缓存（low~medium）；状态目录过大（low） |
@@ -61,6 +62,20 @@ envcheck 直接把宿主的判断读出来（dsh plugin list 的 stderr 警告�
 
 修复需要 dsh plugin --profile <p> install 迁移 store（会重建 node_modules），属于会改变依赖树的动作，
 必须由人确认后执行；envcheck 只报告，不自动做。
+
+## 4.6 技能健康检查抓的是什么
+
+最危险的不是"技能没装"，而是"技能还装着，但里面的指令指向已经不存在的东西"。
+这种技能不会报错，它只是安静地教模型一套这台机器已经跑不通的流程。
+
+skill_health 对每个技能做静态检查：
+
+- 正文里的 markdown 链接与代码片段路径是否真实存在（跳过 http 与围栏代码块）；
+- scripts/ 下每个 .py 能否编译、.json 能否解析、shell/ps1 是否为空；
+- name/description/version 是否齐全、SKILL.md 是否过大；
+- 距上次修改多少天（默认 180 天 warn，360 天 high）。
+
+它不执行技能代码，也判断不了"内容在语义上是否过时"——那需要人看，或用 verify --command 跑一次真实冒烟。
 
 ## 5. 集成位置
 

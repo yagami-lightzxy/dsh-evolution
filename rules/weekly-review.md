@@ -59,6 +59,8 @@ python .../evolution.py schedule remove --driver os --apply
 - [ ] 模型通道 provider/model/reasoningEffort 是否显式且合理
 - [ ] 锁文件是否落后于依赖清单
 - [ ] 运行时是否 EOL 或临近 EOL
+- [ ] `health` 是否有 bad 技能：引用失效、脚本编译失败、长期未动
+- [ ] `health` 报告里 warn 的项是否值得本周期修（至少处理 high）
 - [ ] 本地技能是否覆盖了插件内置技能（可能压住修复版本）
 - [ ] 上一份周报距今多久（>28 天即为 high）
 

@@ -36,6 +36,8 @@ from evo.metrics import record as record_metric  # noqa: E402
 from evo.metrics import stats as metrics_stats  # noqa: E402
 from evo.paths import build_paths  # noqa: E402
 from evo.review import run_review  # noqa: E402
+from evo.scaffold import create_skill, verify_skill  # noqa: E402
+from evo.skill_health import local_references, run_skill_health  # noqa: E402
 from evo.snapshot import (  # noqa: E402
     create_snapshot,
     diff_snapshot,
@@ -732,6 +734,86 @@ class TestPluginUpgradeGating(unittest.TestCase):
         self.assertEqual(result["upgraded"], [])
         self.assertFalse(result["applied"])
         self.assertFalse(result["requires_restart"])
+
+
+class TestSkillHealthAndScaffold(unittest.TestCase):
+    """A skill that points at missing files is worse than no skill at all."""
+
+    def setUp(self) -> None:
+        self.env = Env()
+        self.skills_root = self.env.home / ".dsh" / "skills"
+
+    def tearDown(self) -> None:
+        self.env.cleanup()
+
+    def test_local_references_ignores_urls_and_fences(self) -> None:
+        body = (
+            "See [repo](https://example.com/x) and [guide](references/guide.md).\n"
+            "Run \x60scripts/run.py\x60 but not \x60some phrase here\x60.\n"
+            "~~~\n[ignored](references/missing-in-fence.md)\n~~~\n"
+        )
+        refs = local_references(body)
+        self.assertIn("references/guide.md", refs)
+        self.assertIn("scripts/run.py", refs)
+        self.assertNotIn("references/missing-in-fence.md", refs)
+
+    def test_health_flags_broken_reference_and_staleness(self) -> None:
+        folder = self.env.add_skill("drifty-skill", "a skill whose docs drifted away", "See [guide](references/guide.md).")
+        (folder / "scripts").mkdir(exist_ok=True)
+        (folder / "scripts" / "run.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+        old = __import__("time").time() - 400 * 86400
+        os.utime(folder / "SKILL.md", (old, old))
+        result = run_skill_health(self.env.paths, self.env.cfg, stale_days=180)
+        kinds = {f["kind"] for f in result["findings"]}
+        self.assertIn("broken-reference", kinds)
+        self.assertIn("stale", kinds)
+        report = next(s for s in result["skills"] if s["name"] == "drifty-skill")
+        self.assertEqual(report["status"], "bad")
+
+    def test_health_flags_broken_script(self) -> None:
+        folder = self.env.add_skill("bad-script-skill", "a skill with a script that cannot compile", "Use it.")
+        (folder / "scripts").mkdir(exist_ok=True)
+        (folder / "scripts" / "broken.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
+        result = run_skill_health(self.env.paths, self.env.cfg)
+        kinds = {f["kind"] for f in result["findings"]}
+        self.assertIn("broken-script", kinds)
+
+    def test_scaffold_then_verify_passes(self) -> None:
+        plan = create_skill(
+            self.skills_root,
+            "fresh-skill",
+            "a freshly scaffolded skill used by the verification test",
+            with_script=True,
+            with_tests=True,
+            apply=True,
+        )
+        self.assertTrue(plan["ok"])
+        target = Path(plan["target"])
+        self.assertTrue((target / "SKILL.md").is_file())
+        result = verify_skill(target, command=[__import__("sys").executable, "--version"])
+        self.assertTrue(result["ok"], result["errors"])
+
+    def test_verify_rejects_bad_frontmatter(self) -> None:
+        folder = self.skills_root / "broken-skill"
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text("---\nname: Bad Name\ndescription: \"x\"\n---\n\nbody\n", encoding="utf-8")
+        result = verify_skill(folder)
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("kebab-case" in e for e in result["errors"]))
+        self.assertTrue(any("description" in e for e in result["errors"]))
+
+    def test_verify_fails_when_smoke_command_fails(self) -> None:
+        plan = create_skill(self.skills_root, "smoke-skill", "skill used to prove a failing smoke gate", apply=True)
+        result = verify_skill(plan["target"], command=[__import__("sys").executable, "-c", "raise SystemExit(3)"])
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("冒烟命令失败" in e for e in result["errors"]))
+
+    def test_scaffold_rejects_duplicate_and_bad_name(self) -> None:
+        create_skill(self.skills_root, "dup-skill-name", "first creation of the duplicate test skill", apply=True)
+        again = create_skill(self.skills_root, "dup-skill-name", "second creation of the duplicate test skill", apply=True)
+        self.assertFalse(again["ok"])
+        bad = create_skill(self.skills_root, "Bad_Name", "invalid name should be rejected outright", apply=False)
+        self.assertFalse(bad["ok"])
 
 
 if __name__ == "__main__":

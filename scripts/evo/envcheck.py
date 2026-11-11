@@ -30,6 +30,7 @@ from typing import Any
 from . import __version__
 from .config import get
 from .paths import Paths
+from .skill_health import run_skill_health
 from .util import (
     md_cell,
     now_iso,
@@ -93,6 +94,7 @@ CHECK_ORDER = [
     "web_tools",
     "runtime_eol",
     "toolchain",
+    "skill_health",
     "skill_shadow",
     "heartbeat",
     "hygiene",
@@ -841,6 +843,43 @@ def _check_toolchain(ctx: dict[str, Any], paths: Paths, cfg: dict[str, Any]) -> 
     }
 
 
+def _check_skill_health(ctx: dict[str, Any], paths: Paths, cfg: dict[str, Any]) -> None:
+    """Per-skill integrity: the failure mode where a skill stays installed but
+    its instructions point at files (or scripts) that no longer work."""
+    result = run_skill_health(paths, cfg)
+    ctx["skill_health"] = result["counts"]
+    ctx["skill_health"]["issues"] = len(result["findings"])
+    order = {"high": 0, "medium": 1, "low": 2}
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for finding in result["findings"]:
+        grouped.setdefault((str(finding["severity"]), str(finding["kind"])), []).append(finding)
+    added = 0
+    for (severity, kind), items in sorted(grouped.items(), key=lambda kv: order.get(kv[0][0], 9)):
+        if added >= 6:
+            break
+        names = ", ".join(str(i["skill"]) for i in items[:5])
+        more = f" 等 {len(items)} 项" if len(items) > 5 else ""
+        _add(
+            ctx["findings"],
+            "skill_health",
+            severity=severity,
+            title=f"技能问题（{kind}）：{len(items)} 处",
+            evidence=f"{names}{more}；示例：{items[0]['detail'][:200]}",
+            recommendation=(
+                "引用失效的补文件或改文档；脚本编译失败先修代码再谈复用；"
+                "过期技能用 evolution verify 复验，仍不适用则归档而非保留。"
+            ),
+            path=str(items[0].get("path") or ""),
+        )
+        added += 1
+    counts = result["counts"]
+    status = "fail" if counts.get("bad") else ("warn" if counts.get("warn") or result["findings"] else "ok")
+    ctx["checks"]["skill_health"] = {
+        "status": status,
+        "detail": f"{counts['total']} 个技能：ok {counts['ok']} / warn {counts['warn']} / bad {counts['bad']}；问题 {len(result['findings'])}",
+    }
+
+
 def _check_skill_shadow(ctx: dict[str, Any], paths: Paths, cfg: dict[str, Any]) -> None:
     """Detect local skills shadowing plugin-bundled ones (rank 400 beats 600)."""
     local_roots = [_dsh_home(paths) / "skills", paths.os_home / ".agents" / "skills"]
@@ -1043,6 +1082,7 @@ def run_envcheck(
     _check_web_tools(ctx, paths, cfg)
     _check_runtime_eol(ctx, paths, cfg, online=online)
     _check_toolchain(ctx, paths, cfg)
+    _check_skill_health(ctx, paths, cfg)
     _check_skill_shadow(ctx, paths, cfg)
     _check_heartbeat(ctx, paths, cfg)
     _check_hygiene(ctx, paths, cfg, threshold_days=threshold_days)
@@ -1124,6 +1164,7 @@ def envcheck_markdown(result: dict[str, Any]) -> str:
         "web_tools": "联网工具",
         "runtime_eol": "运行时生命周期",
         "toolchain": "所需工具",
+        "skill_health": "技能健康",
         "skill_shadow": "技能覆盖关系",
         "heartbeat": "进化心跳",
         "hygiene": "淤积与备份",

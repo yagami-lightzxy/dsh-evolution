@@ -13,6 +13,8 @@ from . import __version__
 from .audit import fail_on, latest_audit, run_audit, write_audit
 from .cleanup import apply_cleanup, cleanup_markdown, plan_cleanup
 from .envcheck import run_envcheck, write_envcheck
+from .scaffold import create_skill, verify_markdown, verify_skill
+from .skill_health import run_skill_health, skill_health_markdown
 from .config import ensure_config, get, load_config, validate_config
 from .discover import discover_all
 from .frontmatter import load_skill, parse_frontmatter
@@ -357,6 +359,76 @@ def _cleanup(args: argparse.Namespace) -> int:
         human += "\n这是 dry-run；加 --apply 执行。\n"
     _emit(args, {"plan": plan, "result": result}, human)
     return 0 if not (result and result.get("errors")) else 1
+
+
+def _health(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    cfg = _cfg(paths)
+    result = run_skill_health(paths, cfg, stale_days=int(getattr(args, "days", 0) or 0) or None)
+    if getattr(args, "print_report", False) and not getattr(args, "json", False):
+        print(skill_health_markdown(result))
+    else:
+        counts = result["counts"]
+        human = (
+            f"技能健康：{counts['total']} 个（ok {counts['ok']} / warn {counts['warn']} / bad {counts['bad']}）\n"
+            f"问题：{len(result['findings'])} 条，过期阈值 {result['stale_days']} 天\n"
+        )
+        for finding in result["findings"][:10]:
+            human += f"- [{finding['severity']}] {finding['skill']} · {finding['kind']}：{finding['detail'][:120]}\n"
+        _emit(args, result, human)
+    threshold = str(getattr(args, "fail_on", "none") or "none")
+    if threshold != "none":
+        rank = {"high": 3, "medium": 2, "low": 1, "info": 0}
+        worst = max((rank.get(str(f.get("severity")), 0) for f in result["findings"]), default=0)
+        if worst >= rank.get(threshold, 99):
+            return 1
+    return 0
+
+
+def _new(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    _cfg(paths)
+    root = Path(args.dir).expanduser() if args.dir else paths.os_home / ".dsh" / "skills"
+    result = create_skill(
+        root,
+        args.name,
+        args.description,
+        version=args.version,
+        license=args.license,
+        author=args.author,
+        when_to_use=args.when_to_use,
+        with_script=bool(args.with_script),
+        with_tests=bool(args.with_tests),
+        apply=bool(args.apply),
+    )
+    human = [f"新建技能：{result['name']} → {result['target']}"]
+    for path in result.get("files", []):
+        human.append(f"- {path}")
+    if not result["ok"]:
+        for item in result["errors"]:
+            human.append(f"错误：{item}")
+    elif not result.get("applied"):
+        human.append("这是 dry-run；加 --apply 写盘。")
+    else:
+        human.append(f"下一步：{result.get('next', '')}")
+    _emit(args, result, "\n".join(human))
+    return 0 if result["ok"] else 1
+
+
+def _verify(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    _cfg(paths)
+    command: Any = (args.command or "").strip()
+    if isinstance(command, str) and command.startswith("["):
+        # JSON array form avoids every shell quoting trap: ["python", "-m", "unittest"]
+        try:
+            command = json.loads(command)
+        except ValueError as exc:
+            _err(f"--command JSON 解析失败: {exc}")
+            return 2
+    result = verify_skill(args.path, command=command, timeout=float(args.timeout))
+    _emit(args, result, verify_markdown(result))
+    return 0 if result["ok"] else 1
 
 
 def _maintain(args: argparse.Namespace) -> int:
@@ -977,6 +1049,31 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--include-backups", action="store_true")
     p.add_argument("--no-logs", action="store_true")
     p.set_defaults(func=_cleanup)
+
+    p = sub.add_parser("health", help="skill integrity and staleness check")
+    p.add_argument("--days", type=int, default=0, help="staleness threshold in days (0 = config/default)")
+    p.add_argument("--print-report", action="store_true")
+    p.add_argument("--fail-on", choices=["none", "low", "medium", "high"], default="none")
+    p.set_defaults(func=_health)
+
+    p = sub.add_parser("new", help="scaffold a new skill from an identified capability gap")
+    p.add_argument("--name", required=True)
+    p.add_argument("--description", required=True)
+    p.add_argument("--dir", default="", help="destination root (default ~/.dsh/skills)")
+    p.add_argument("--version", default="0.1.0")
+    p.add_argument("--license", default="MIT")
+    p.add_argument("--author", default="")
+    p.add_argument("--when-to-use", dest="when_to_use", default="")
+    p.add_argument("--with-script", action="store_true")
+    p.add_argument("--with-tests", action="store_true")
+    p.add_argument("--apply", action="store_true")
+    p.set_defaults(func=_new)
+
+    p = sub.add_parser("verify", help="verify a skill: structure, scripts, references, optional smoke command")
+    p.add_argument("--path", required=True)
+    p.add_argument("--command", default="", help="smoke command to run inside the skill dir")
+    p.add_argument("--timeout", type=float, default=120.0)
+    p.set_defaults(func=_verify)
 
     p = sub.add_parser("fetch", help="download/install a skill from GitHub or zip")
     p.add_argument("--source", required=True, help="github:owner/repo, https://github.com/owner/repo, or local dir/zip")

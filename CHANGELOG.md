@@ -9,6 +9,27 @@ Format: Keep a Changelog; versioning: SemVer.
 - 每周先运行 envcheck 再评估能力：插件被宿主拒绝加载时，先升级或卸载该插件，再讨论是否新增工具；模型通道必须显式配置 reasoningEffort。
 
 
+## [1.5.0] — 2026-11-11
+
+### Added
+- **Skill health** (health command + evo/skill_health.py, wired into envcheck as skill_health):
+  per-skill integrity instead of per-skill presence. Detects docs that reference files which no longer exist,
+  scripts that no longer compile, unparsable config, missing version metadata, oversized SKILL.md and long
+  periods without change (180 days warn / 360 days high). Read-only, bounded, never executes skill code.
+- **Create on demand** (new command + evo/scaffold.py): scaffold a valid skill from an identified capability gap
+  in one step -- frontmatter, optional runnable script stub, optional tests -- with dry-run by default.
+- **Verification gate** (verify command): frontmatter validity, SKILL.md size, every .py compiles, every .json
+  parses, every referenced local path resolves, and an optional smoke command that must exit 0.
+  A JSON-array form (--command '["python","--version"]') avoids all shell quoting traps.
+- references/self-extension.md: when to reuse / install / build, and the rule that an unverified skill is not a capability.
+- 7 new tests (50 total).
+
+### Changed
+- envcheck now reports skill_health alongside plugin_compat: an environment can be healthy while a skill's
+  instructions are already broken.
+- Weekly checklist gained an explicit step to act on bad/warn skills instead of only listing them.
+
+
 ## [1.4.0] — 2026-11-10
 
 ### Added

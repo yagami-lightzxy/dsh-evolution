@@ -3,7 +3,7 @@ name: evolution
 description: "全局 Agent 自优化与能力管理：任务开始前盘点并复用已有 Skill/MCP/插件/工具，判断能力缺口；维护跨 Agent 全局规则；审计环境、依赖、权限与供应链风险；执行每周审阅与升级评估；提供哈希快照、回滚、脱敏指标、导出导入和 MCP 接入。默认离线、最小权限、可验证，拒绝以节省资源为由敷衍任务。"
 whenToUse: "当用户要求优化 Agent 或工作流、审计/清理技能与工具、制定或同步全局规则、执行每周审阅、评估升级、封装跨 Agent 能力、排查能力缺口，或需要在多个 Agent（DSH/Claude Code/Codex 等）之间共享同一套规则时使用。普通代码或文档任务不必为加载本技能而停下，但其任务环与复用盘点可直接参照 references/task-loop.md。"
 metadata:
-  version: "1.4.0"
+  version: "1.5.0"
   license: "MIT"
   author: "DSH evolution"
   homepage: "~/.dsh/skills/evolution"
@@ -36,6 +36,9 @@ metadata:
    再查项目内工具、MCP、脚本、历史产物。**已有方案优先复用。**
 3. **检索**：只有在能力不足或方案不确定时才检索 GitHub / 官方文档 / 社区。评估维护状态、许可证、依赖、安全、适配成本；不为“最新”而升级。
 4. **补全**：确认缺口后，优先可信、轻量、免费、可回滚的方案。安装/升级默认 dry-run；付费、敏感权限、外部发送、破坏性变更必须先获授权。
+4.5 **能力缺口处置**：确认缺口后先选路径——复用已有 → 安装外部（`fetch`，审许可证与脚本）→ 自建（`new`）。
+   自建的技能必须过 `verify`：frontmatter 合法、脚本可编译、正文引用的路径存在、冒烟命令退出码 0。
+   没过验收不能说"能力已具备"。详见 `references/self-extension.md`。
 5. **执行**：选择效果与成本综合最优路径；能并行且互不依赖才并行；能缓存才缓存；不做无意义调用。长任务设置检查点。涉及修改规则/权限/安全内核时，先快照、再预检、临时写入、验证、提交；失败自动回滚。
 6. **验证**：按验收标准运行真实检查（测试、构建、运行、页面/接口验证、引用核对）。失败先诊断再改；不以“看起来完成”代替完成。
 7. **沉淀**：把可复用方案、失败教训、决策写入项目记忆或 `evolution knowledge add`；不写临时信息、不重复记录、不膨胀。
@@ -64,6 +67,9 @@ python scripts/evolution.py envcheck                # 环境年代感体检（�
 python scripts/evolution.py envcheck --online       # 追加 npm/EOL 版本核对
 python scripts/evolution.py cleanup                 # 断舍离演练（默认 dry-run）
 python scripts/evolution.py cleanup --apply         # 清理缓存/过期报告/日志
+python scripts/evolution.py health                  # 技能健康：引用失效/脚本坏/过期/缺版本
+python scripts/evolution.py new --name x --description "..." --with-script --with-tests --apply
+python scripts/evolution.py verify --path <skill>   # 验收闸门，可选 --command '["python","--version"]'
 python scripts/evolution.py plugins --online        # 插件升级候选
 python scripts/evolution.py plugins --apply --online # 执行同 major 升级（含快照/回滚）
 python scripts/evolution.py capabilities            # 盘点 Skill/MCP/插件/依赖
@@ -190,6 +196,7 @@ python scripts/evolution.py cleanup --apply           # 5. 断舍离
 | `references/envcheck.md` | 环境年代感体检：12 项检查、判定口径、集成方式 |
 | `references/windows-tooling.md` | Windows 工具层：winget 升级、缺失工具安装、计划任务 |
 | `references/merge-notes.md` | 跨 Agent 同名技能合并的来源与取舍 |
+| `references/self-extension.md` | 按需新建/安装技能与工具的判据、命令与验收闸门 |
 | `rules/weekly-review.md` | 周审阅清单、指标口径、报告模板 |
 | `rules/learned.md` | 由 `evolve` 生成的可验证学习规则 |
 | `rules/security.md` | 风险分级、供应链审查、密钥与回滚 |
