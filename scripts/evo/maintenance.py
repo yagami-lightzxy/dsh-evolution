@@ -596,7 +596,15 @@ def run_maintenance(
         # Dry-run queue: report what would be installed without downloading.
         for item in get(cfg, "maintenance.install_queue", []) or []:
             if isinstance(item, dict):
-                result["install_queue"].append({"name": item.get("name"), "action": "would-install", "source": item.get("source")})
+                result["install_queue"].append(
+                    {
+                        "name": item.get("name"),
+                        "kind": item.get("kind", "skill"),
+                        "action": "would-run" if item.get("kind") == "tool" else "would-install",
+                        "source": item.get("source"),
+                        "command": item.get("command"),
+                    }
+                )
     result["path"] = str(paths.state_dir / "maintenance-latest.json")
     write_json(paths.state_dir / "maintenance-latest.json", result)
     md = paths.reports_dir / "maintenance"

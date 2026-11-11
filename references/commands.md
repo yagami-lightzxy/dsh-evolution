@@ -109,6 +109,31 @@ evolution.py review [--week 2026-W45] [--online] [--no-audit] [--days 30] [--pri
 
 - 默认离线；`--online` 检查 `config.upgrade_watch` 的 GitHub release/元数据（缓存 24h，未认证限流 60/h）。
 - `--apply`：先执行 `maintain --apply`，再做审计与报告；周任务使用此模式。
+
+## improve
+
+```text
+evolution.py improve [--days 30] [--online] [--apply] [--purge]
+```
+
+把环境体检、审计、技能健康、维护计划、任务复盘和学习提案合并成一次闭环。
+无 `--apply` 时只生成 `state/autonomy-latest.json`。加 `--apply` 后执行维护、写入学习规则、隔离已证明闲置的受管技能，并按复盘证据生成新技能。
+
+## reflect
+
+```text
+evolution.py reflect [--days 30] [--min-repeats 3]
+```
+
+从 `state/metrics.jsonl` 提取反复失败、重复成功工作流和关联技能，写入 `state/evolution/reflection-latest.json`。
+
+## evaluate
+
+```text
+evolution.py evaluate --input evaluation.json [--min-effect 3] [--max-sd 2] [--min-overlap 0.8] [--apply]
+```
+
+输入 JSON 同时包含训练集与留出集的基线/候选分数，以及变更前后的函数列表。只有基线稳定、训练集达到有效增益、留出集不回退、函数保留率达标时才接受候选。`--apply` 会在接受后创建快照并复制候选文件到 `target`。
 - `--no-audit` 复用 `state/audit-latest.json`。
 - `--fail-on` 可用于 CI 门禁；默认 `none`，CI 可设 `high`。
 
@@ -137,7 +162,7 @@ evolution.py fetch --source github:owner/repo [--name skill] [--ref main] [--pat
 - 同内容技能去重：保留 `~/.agents/skills` 规范源，其他位置改为 junction；原目录备份。
 - 无效技能隔离：移到 `state/quarantine/<时间>/<agent>/`，不永久删除。
 - 插件升级检查：对比 npm registry，输出同 major/跨 major 候选；跨 major 不自动升级。
-- `install_queue` 按需下载：来源、许可证、静态扫描通过后安装。
+- `install_queue` 按需补全能力：默认项安装技能，`kind=tool` 项执行配置的工具命令并记录退出码。
 
 配置：`config.maintenance.auto_apply`、`scope`、`max_actions`、`install_queue`、`require_license`、`protected_skills`。默认 `auto_apply=true`；手动可用 `--dry-run`。
 所有删除/替换先 snapshot + 单独备份；失败恢复；记录 `state/maintenance-latest.json` 与 `reports/maintenance/`。

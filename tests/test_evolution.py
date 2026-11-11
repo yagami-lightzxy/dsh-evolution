@@ -17,6 +17,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from evo.audit import fail_on, run_audit  # noqa: E402
+from evo.autonomy import apply_improvement, plan_improvement  # noqa: E402
 from evo.config import ensure_config, load_config  # noqa: E402
 from evo.frontmatter import load_skill, parse_frontmatter  # noqa: E402
 from evo.install import (  # noqa: E402
@@ -30,7 +31,9 @@ from evo.install import (  # noqa: E402
 from evo.cleanup import apply_cleanup, cleanup_markdown, plan_cleanup  # noqa: E402
 from evo.envcheck import entry_config, parse_patch_entries, run_envcheck  # noqa: E402
 from evo.evolve import bump_version, diagnose  # noqa: E402
-from evo.fetch import fetch_skill  # noqa: E402
+from evo.evaluation import evaluate_candidate, promote  # noqa: E402
+from evo.experience import materialize_skills, reflect  # noqa: E402
+from evo.fetch import fetch_skill, run_install_queue  # noqa: E402
 from evo.maintenance import apply_plugin_updates, run_maintenance  # noqa: E402
 from evo.metrics import record as record_metric  # noqa: E402
 from evo.metrics import stats as metrics_stats  # noqa: E402
@@ -40,6 +43,7 @@ from evo.scaffold import create_skill, verify_skill  # noqa: E402
 from evo.skill_health import local_references, run_skill_health  # noqa: E402
 from evo.skill_sources import (  # noqa: E402
     plan_quarantine,
+    purge_quarantine,
     quarantine,
     restore as restore_skill,
     update_entry,
@@ -410,6 +414,13 @@ class TestMaintenanceAndFetch(unittest.TestCase):
         dest = self.env.home / ".agents" / "skills" / "demo-fetch"
         self.assertTrue((dest / "SKILL.md").is_file())
         self.assertTrue((dest / ".evolution-source.json").is_file())
+
+    def test_install_queue_can_run_configured_tool(self) -> None:
+        self.env.cfg["maintenance"]["install_queue"] = [{"kind": "tool", "name": "probe", "command": [sys.executable, "-c", "print('ok')"]}]
+        dry = run_install_queue(self.env.paths, self.env.cfg, apply=False)
+        self.assertEqual(dry[0]["action"], "would-run")
+        result = run_install_queue(self.env.paths, self.env.cfg, apply=True)
+        self.assertTrue(result[0]["ok"], result)
 
 
 class TestSelfEvolution(unittest.TestCase):
@@ -947,6 +958,120 @@ class TestSkillSources(unittest.TestCase):
         data = update_entry(self.env.paths, self.env.cfg, {"name": "local-only", "source": {}}, apply=False)
         self.assertFalse(data["ok"])
         self.assertIn("来源", data["error"])
+
+    def test_old_quarantine_can_be_purged(self) -> None:
+        folder = self.env.paths.state_dir / "quarantine" / "old" / "demo"
+        folder.mkdir(parents=True)
+        (folder / ".evolution-quarantine.json").write_text(
+            json.dumps({"name": "demo", "quarantined_at": "2020-01-01T00:00:00"}), encoding="utf-8"
+        )
+        plan = purge_quarantine(self.env.paths, days=30)
+        self.assertEqual(len(plan["candidates"]), 1)
+        result = purge_quarantine(self.env.paths, days=30, apply=True)
+        self.assertEqual(len(result["purged"]), 1)
+        self.assertFalse(folder.exists())
+
+
+class TestEvaluation(unittest.TestCase):
+    def setUp(self) -> None:
+        self.env = Env()
+
+    def tearDown(self) -> None:
+        self.env.cleanup()
+
+    def test_candidate_requires_stable_holdout_improvement_and_function_overlap(self) -> None:
+        report = evaluate_candidate(
+            {
+                "skill": "demo",
+                "train_before": [70, 70, 70],
+                "train_after": [75, 75, 75],
+                "holdout_before": [68, 69],
+                "holdout_after": [72, 73],
+                "functions_before": ["search", "verify"],
+                "functions_after": ["search", "verify", "report"],
+            }
+        )
+        self.assertTrue(report["accepted"], report)
+        self.assertEqual(report["function_overlap"], 1.0)
+
+    def test_candidate_rejected_when_holdout_regresses(self) -> None:
+        report = evaluate_candidate(
+            {
+                "train_before": [70, 70, 70],
+                "train_after": [75, 75, 75],
+                "holdout_before": [70, 70],
+                "holdout_after": [69, 69],
+                "functions_before": ["search"],
+                "functions_after": ["search"],
+            }
+        )
+        self.assertFalse(report["accepted"])
+        self.assertIn("holdout_effect", report["reason"])
+
+    def test_promote_only_accepts_candidate(self) -> None:
+        candidate = self.env.root / "candidate.md"
+        target = self.env.root / "target.md"
+        candidate.write_text("candidate\n", encoding="utf-8")
+        target.write_text("old\n", encoding="utf-8")
+        report = evaluate_candidate(
+            {
+                "candidate": str(candidate),
+                "target": str(target),
+                "train_before": [70, 70, 70],
+                "train_after": [75, 75, 75],
+                "holdout_before": [70, 70],
+                "holdout_after": [72, 72],
+                "functions_before": ["search"],
+                "functions_after": ["search"],
+            }
+        )
+        result = promote(self.env.paths, report, apply=True)
+        self.assertTrue(result["applied"])
+        self.assertEqual(target.read_text(encoding="utf-8"), "candidate\n")
+
+
+class TestExperienceReflection(unittest.TestCase):
+    def setUp(self) -> None:
+        self.env = Env()
+
+    def tearDown(self) -> None:
+        self.env.cleanup()
+
+    def test_repeated_successful_workflow_becomes_skill_proposal(self) -> None:
+        for _ in range(3):
+            record_metric(self.env.paths, task="weekly audit", outcome="success", tags=["audit", "weekly"], skill="")
+        result = reflect(self.env.paths, days=30, min_repeats=3)
+        self.assertTrue(any(item["kind"] == "extract-skill" for item in result["proposals"]), result)
+
+    def test_materialize_repeated_workflow_as_managed_skill(self) -> None:
+        proposals = [{
+            "kind": "extract-skill",
+            "id": "workflow:weekly,audit",
+            "title": "把重复工作流固化为技能：weekly audit",
+            "evidence": {"examples": ["weekly audit"]},
+        }]
+        result = materialize_skills(self.env.paths, proposals, apply=True)
+        self.assertTrue(result[0]["applied"])
+        target = Path(result[0]["target"])
+        self.assertTrue((target / "SKILL.md").is_file())
+        self.assertTrue((target / ".evolution-source.json").is_file())
+
+
+class TestImprovementLoop(unittest.TestCase):
+    def setUp(self) -> None:
+        self.env = Env()
+
+    def tearDown(self) -> None:
+        self.env.cleanup()
+
+    def test_plan_and_apply_runs_one_loop(self) -> None:
+        for _ in range(3):
+            record_metric(self.env.paths, task="weekly audit", outcome="success", tags=["audit", "weekly"])
+        plan = plan_improvement(self.env.paths, self.env.cfg, days=30, online=False)
+        self.assertEqual(plan["kind"], "improvement-plan")
+        result = apply_improvement(self.env.paths, self.env.cfg, plan, online=False)
+        self.assertIn("evolution", result)
+        self.assertTrue(self.env.paths.autonomy_file.is_file())
 
 
 if __name__ == "__main__":

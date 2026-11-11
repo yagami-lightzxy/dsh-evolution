@@ -1,11 +1,12 @@
 """Which installed skills came from where, and which are actually still used?
 
-Deleting an unused skill is not something this module does. Two reasons:
+Active skills are never deleted directly. Two rules govern retirement:
 
   * the host does not report skill invocations, so "unused" is a guess built
     from age and the metrics ledger -- strong enough to nominate a skill for
     quarantine, never strong enough to destroy it;
-  * deletion is irreversible. Quarantine is not.
+  * managed entries can be purged after the configured quarantine retention;
+    hand-written or unknown-source skills never enter that path.
 
 So the loop is: nominate -> move to a dated quarantine folder with a manifest ->
 restore on demand. A skill written by hand (no provenance file) is never
@@ -204,6 +205,33 @@ def restore(paths: Paths, name: str, *, apply: bool = False) -> dict[str, Any]:
     return report
 
 
+def purge_quarantine(paths: Paths, *, days: int = 365, apply: bool = False) -> dict[str, Any]:
+    """Remove managed quarantine entries older than the configured retention."""
+    root = paths.state_dir / "quarantine"
+    candidates: list[dict[str, Any]] = []
+    if not root.is_dir():
+        return {"days": days, "candidates": [], "purged": [], "applied": apply}
+    cutoff = time.time() - max(0, int(days)) * 86400
+    for manifest_path in sorted(root.rglob(QUARANTINE_MANIFEST)):
+        folder = manifest_path.parent
+        manifest = read_json(manifest_path, default={})
+        stamp = str((manifest or {}).get("quarantined_at") or "")
+        try:
+            age_source = time.mktime(time.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S")) if stamp else manifest_path.stat().st_mtime
+        except (ValueError, OSError):
+            age_source = manifest_path.stat().st_mtime
+        if age_source > cutoff:
+            continue
+        candidates.append({"name": (manifest or {}).get("name") or folder.name, "path": str(folder), "quarantined_at": stamp})
+    purged: list[dict[str, Any]] = []
+    if apply:
+        for item in candidates:
+            folder = Path(item["path"])
+            shutil.rmtree(folder)
+            purged.append(item)
+    return {"days": days, "candidates": candidates, "purged": purged, "applied": apply}
+
+
 def update_entry(paths: Paths, cfg: dict[str, Any], entry: dict[str, Any], *, apply: bool = False) -> dict[str, Any]:
     """Re-fetch one managed skill from its recorded source."""
     from .fetch import fetch_skill
@@ -260,7 +288,7 @@ def sources_markdown(entries: list[dict[str, Any]], plan: dict[str, Any] | None 
                 lines.append(f"- {item['name']}：{item['why']}")
             lines.append("")
     lines.append("## 边界")
-    lines.append("- 本工具不删除技能：只做隔离，且可用 --restore 还原。")
+    lines.append("- 活跃技能先隔离并记录来源；隔离超过保留期后可用 improve --purge 清理。")
     lines.append("- 没有来源记录的手写技能永不进入隔离候选。")
     lines.append("- 使用次数来自 evolution 的任务记录；宿主不提供技能调用遥测，没有记录不等于真的没用。")
     return "\n".join(lines)

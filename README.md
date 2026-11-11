@@ -38,7 +38,11 @@ python scripts/evolution.py recommend --task "审计本机技能并给出清理�
 python scripts/evolution.py audit
 python scripts/evolution.py review
 
-# 5) 原生每周自动化（首选）
+# 5) 一次完整的自主改进循环
+python scripts/evolution.py improve
+python scripts/evolution.py improve --apply --online
+
+# 6) 原生每周自动化（首选）
 python scripts/evolution.py schedule native --apply
 # 然后在 DSH 中调用 schedule_create，使用 state/native-schedule.md 的 prompt。
 # 仅无原生调度时：schedule install --driver os --apply
@@ -80,7 +84,7 @@ python scripts/evolution.py schedule native --apply
 
 ## 命令总览
 
-`init/status/doctor/capabilities/recommend/audit/review/evolve/maintain/plugins/fetch/record/stats/snapshot/history/diff/rollback/install/uninstall/export/import/release/schedule/knowledge/validate/selfcheck/test/prune/mcp`
+`init/status/doctor/capabilities/recommend/audit/review/improve/reflect/evaluate/evolve/maintain/plugins/fetch/record/stats/snapshot/history/diff/rollback/install/uninstall/export/import/release/schedule/knowledge/validate/selfcheck/test/prune/mcp`
 
 CI 模板：`templates/github-actions.yml`（复制到 `.github/workflows/`）；安装包装器：`install.ps1` / `install.sh` / `install.cmd`。
 
@@ -93,11 +97,13 @@ CI 模板：`templates/github-actions.yml`（复制到 `.github/workflows/`）�
 - 报告对密钥形态脱敏；不读取无关隐私文件。
 - 每次受管变更前自动快照；写入原子化；并发单实例锁。
 - 安全内核（`rules/security.md`、`rules/precedence.md`、AGENTS 块模板、安全配置）有哈希锁；变更后必须 `--accept-safety-change` 才能安装，防止 Agent 静默放宽自己的边界。
-- **周任务默认自我进化 + 自主维护**（用户 2026-11-07/08 授权）：先从指标、审计、维护证据生成学习规则；有新学习项时跑完整测试并升级自身版本；再去重、隔离、检查/升级插件与技能、处理按需下载。每个变更先快照并备份，失败恢复。跨 major、付费、敏感外发、未备份删除、用户手写技能不动。
+- **周任务默认自我进化 + 自主维护**（用户 2026-11-07/08 授权）：先从指标、审计、维护证据生成学习规则；有新学习项时跑完整测试并升级自身版本；再去重、隔离、检查/升级插件与技能、处理按需下载和重复工作流生成。活动技能先记录来源并隔离，达到保留期后 `--purge` 才清理。跨 major、付费、敏感外发和用户手写技能不自动处理。
 
 ## 每周自我进化与审阅
 
 ```bash
+python scripts/evolution.py improve --apply --online       # 环境→审计→复盘→维护→学习
+python scripts/evolution.py reflect --days 30              # 从任务记录提取技能提案
 python scripts/evolution.py evolve --apply --bump patch --release  # 学习→测试→自升级→发布
 python scripts/evolution.py evolve --evaluate                      # 实验复盘
 python scripts/evolution.py review --apply --online   # 维护 + 审阅
@@ -108,6 +114,26 @@ python scripts/evolution.py review --week 2026-W45
 ```
 
 `evolve` 的证据门：样本 <5 只记录、不调策略；失败集中在某类错误才生成对应规则；低风险规则写入 `knowledge/learned.md` 与 `rules/learned.md`；版本升级必须通过完整测试，失败恢复旧版本；实验以 `state/evolution/experiments.jsonl` 跟踪，`--evaluate` 用后续指标判断 keep/regress。
+
+技能内容的优化使用 `evaluate`。候选技能必须提供训练集和留出集分数，基线波动、实际增益和函数保留率同时通过才会晋级。评估输入是一个 JSON 文件，例如：
+
+```json
+{
+  "skill": "search-skill",
+  "candidate": "C:/tmp/search-candidate/SKILL.md",
+  "target": "C:/Users/me/.agents/skills/search-skill/SKILL.md",
+  "train_before": [70, 71, 70],
+  "train_after": [75, 76, 75],
+  "holdout_before": [68, 69],
+  "holdout_after": [72, 73],
+  "functions_before": ["search", "verify"],
+  "functions_after": ["search", "verify", "report"]
+}
+```
+
+```bash
+python scripts/evolution.py evaluate --input evaluation.json --apply
+```
 
 报告：`~/.agents/evolution/reports/weekly/YYYY-Www.md` 与 `.json`；索引 `reports/index.md`。
 
@@ -132,7 +158,7 @@ python -m unittest discover -s tests -v
 python scripts/evolution.py selfcheck --strict
 ```
 
-测试覆盖（29 项）：frontmatter、发现/去重、危险命令与密钥脱敏、指标、快照/diff/回滚、安装/规则块/卸载、dry-run 无副作用、导出/导入与 zip-slip、周报、周号校验、原生调度、MCP 初始化/工具调用、显式接受风险、自动维护去重/隔离、按需下载、自我进化诊断/版本升级。
+测试覆盖（69 项）：frontmatter、发现/去重、危险命令与密钥脱敏、指标、快照/diff/回滚、安装/规则块/卸载、dry-run 无副作用、导出/导入与 zip-slip、周报、周号校验、原生调度、MCP 初始化/工具调用、显式接受风险、自动维护去重/隔离、按需下载、自我进化诊断/版本升级、留出集技能评估、复盘提案、自动生成技能、工具安装队列、隔离区清理与完整改进闭环。
 
 ## 已知限制
 

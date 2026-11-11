@@ -78,6 +78,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "plugin_updates": "auto",
         "backup_retention_days": 90,
     },
+    "autonomy": {
+        "enabled": True,
+        "create_skills": True,
+        "min_repeats": 3,
+        "unused_days": 90,
+        "purge_after_days": 365,
+    },
     "upgrade_watch": [
         {"kind": "github", "repo": "anthropics/skills", "note": "Agent Skills reference"},
         {"kind": "github", "repo": "openai/codex", "note": "Codex CLI"},

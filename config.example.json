@@ -125,6 +125,13 @@
     "plugin_updates": "auto",
     "backup_retention_days": 90
   },
+  "autonomy": {
+    "enabled": true,
+    "create_skills": true,
+    "min_repeats": 3,
+    "unused_days": 90,
+    "purge_after_days": 365
+  },
   "upgrade_watch": [
     {
       "kind": "github",

@@ -3,6 +3,17 @@
 All notable changes to `evolution` are documented here.
 Format: Keep a Changelog; versioning: SemVer.
 
+## [1.7.0] — 2026-11-11
+
+### Added
+
+- `improve` runs one evidence loop across environment currency, audit, skill health, maintenance, reflection, and learning.
+- `reflect` turns repeated failures and repeated successful workflows into repair, refinement, or new-skill proposals.
+- `evaluate` promotes skill variants only when the baseline is stable, the train effect is large enough, the holdout does not regress, and declared functions remain present.
+- Evaluation records, reflection reports, and improvement plans are persisted under the runtime state directory.
+- `maintenance.install_queue` can now execute explicitly configured tool commands and record their exit status.
+- The entry `SKILL.md` is reduced to the trigger rules and improvement loop. Detailed command and implementation reference stays under `references/`.
+
 ## [1.3.1] — 2026-11-10
 
 ### Changed

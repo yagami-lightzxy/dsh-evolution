@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import tempfile
 import urllib.parse
@@ -23,7 +24,7 @@ from .frontmatter import NAME_RE, load_skill, parse_frontmatter
 from .install import COPY_IGNORE, _backup_existing, create_directory_link
 from .paths import Paths
 from .security import scan_skill
-from .util import now_iso, now_stamp, sha256_file, write_json
+from .util import now_iso, now_stamp, run_cmd, sha256_file, write_json
 
 MAX_DOWNLOAD = 60 * 1024 * 1024
 MAX_FILES = 4000
@@ -291,6 +292,18 @@ def run_install_queue(paths: Paths, cfg: dict[str, Any], *, apply: bool = False)
             continue
         name = str(item.get("name", "")).strip()
         source = str(item.get("source", "")).strip()
+        if str(item.get("kind", "skill")) == "tool":
+            raw_command = item.get("command")
+            argv = [str(part) for part in raw_command] if isinstance(raw_command, list) else shlex.split(str(raw_command or ""))
+            if not argv:
+                results.append({"ok": False, "name": name, "error": "tool command required"})
+                continue
+            if not apply:
+                results.append({"ok": True, "name": name, "action": "would-run", "command": argv})
+                continue
+            code, out, err = run_cmd(argv, timeout=float(item.get("timeout", 900)))
+            results.append({"ok": code == 0, "name": name, "action": "run", "command": argv, "exit": code, "output": (out or err)[-1000:]})
+            continue
         if not name or not source:
             results.append({"ok": False, "name": name, "error": "name/source required"})
             continue

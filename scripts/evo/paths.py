@@ -78,6 +78,22 @@ class Paths:
         return self.state_dir / "usage.json"
 
     @property
+    def evolution_dir(self) -> Path:
+        return self.state_dir / "evolution"
+
+    @property
+    def evaluations_file(self) -> Path:
+        return self.evolution_dir / "evaluations.jsonl"
+
+    @property
+    def reflection_file(self) -> Path:
+        return self.evolution_dir / "reflection-latest.json"
+
+    @property
+    def autonomy_file(self) -> Path:
+        return self.state_dir / "autonomy-latest.json"
+
+    @property
     def install_manifest(self) -> Path:
         return self.state_dir / "install-manifest.json"
 
@@ -118,6 +134,7 @@ class Paths:
             self.logs_dir,
             self.bin_dir,
             self.exports_dir,
+            self.evolution_dir,
         ):
             ensure_dir(path)
 
