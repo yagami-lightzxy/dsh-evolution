@@ -340,6 +340,21 @@ def _installed_version(profile: Path, name: str) -> str:
     return str(data.get("version") or "")
 
 
+def classify_plugin_failure(output: str) -> str:
+    """Distinguish a real failure from a supply-chain cool-down.
+
+    A version published minutes ago is rejected by the minimumReleaseAge policy.
+    That is the policy working, not a broken upgrade: report it as deferred so
+    the next weekly run retries instead of rolling back a healthy profile.
+    """
+    text = str(output or "")
+    if "MINIMUM_RELEASE_AGE" in text or "minimumReleaseAge cutoff" in text:
+        return "deferred"
+    if "IGNORED_BUILDS" in text:
+        return "deferred"
+    return "failed"
+
+
 def apply_plugin_updates(
     paths: Paths,
     cfg: dict[str, Any],
@@ -436,7 +451,14 @@ def apply_plugin_updates(
                     shutil.copy2(backup, path)
                 except OSError:
                     pass
-        argv = [str(cli), "plugin", "--profile", profile_name, "install"]
+        argv = [
+            str(cli),
+            "plugin",
+            "--profile",
+            profile_name,
+            "install",
+            "--config.strictDepBuilds=false",
+        ]
         if _sys.platform.startswith("win") and cli.suffix.lower() in {".cmd", ".bat"}:
             argv = ["cmd", "/c", *argv]
         run_cmd(argv, timeout=900, cwd=profile)
@@ -446,7 +468,15 @@ def apply_plugin_updates(
         name = str(item["name"])
         target_version = str(item["latest"])
         before = _installed_version(profile, name)
-        argv = [str(cli), "plugin", "--profile", profile_name, "add", f"{name}@{target_version}"]
+        argv = [
+            str(cli),
+            "plugin",
+            "--profile",
+            profile_name,
+            "add",
+            f"{name}@{target_version}",
+            "--config.strictDepBuilds=false",
+        ]
         if _sys.platform.startswith("win") and cli.suffix.lower() in {".cmd", ".bat"}:
             argv = ["cmd", "/c", *argv]
         code, out, err = run_cmd(argv, timeout=900, cwd=profile)
@@ -464,11 +494,17 @@ def apply_plugin_updates(
         }
         if ok:
             result["upgraded"].append(record)
-        else:
-            record["error"] = "版本未达到目标"
-            result["errors"].append(record)
-            rollback(f"{name} 升级失败：exit={code} before={before} after={after} target={target_version}")
-            break
+            continue
+        kind = classify_plugin_failure(str(out or "") + chr(10) + str(err or ""))
+        if kind == "deferred":
+            record["deferred"] = True
+            record["reason"] = "被供应链策略拦截（24h 冷却或构建脚本），下次再试"
+            result.setdefault("deferred", []).append(record)
+            continue
+        record["error"] = "版本未达到目标"
+        result["errors"].append(record)
+        rollback(f"{name} 升级失败：exit={code} before={before} after={after} target={target_version}")
+        break
 
     result["applied"] = bool(result["upgraded"]) and not result["errors"]
     result["requires_restart"] = result["applied"]

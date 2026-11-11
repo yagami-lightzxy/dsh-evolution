@@ -609,6 +609,28 @@ class TestEnvironmentCurrency(unittest.TestCase):
         result = run_envcheck(self.env.paths, self.cfg, online=False)
         self.assertEqual(result["checks"]["lock_drift"]["status"], "warn")
 
+    def test_lock_drift_is_content_based(self) -> None:
+        self._write_profile({"a": "1.0.0"}, [], lock=False)
+        (self.profile / "node_modules" / "a").mkdir(parents=True)
+        (self.profile / "pnpm-lock.yaml").write_text(
+            "lockfileVersion: '9.0'\nimporters:\n\n  .:\n    dependencies:\n      a:\n        specifier: 1.0.0\n        version: 1.0.0\n",
+            encoding="utf-8",
+        )
+        old = (self.profile / "package.json").stat().st_mtime - 3600
+        os.utime(self.profile / "pnpm-lock.yaml", (old, old))
+        result = run_envcheck(self.env.paths, self.cfg, online=False)
+        self.assertEqual(result["checks"]["lock_drift"]["status"], "ok")
+
+    def test_lock_drift_detects_version_mismatch(self) -> None:
+        self._write_profile({"a": "2.0.0"}, [], lock=False)
+        (self.profile / "node_modules" / "a").mkdir(parents=True)
+        (self.profile / "pnpm-lock.yaml").write_text(
+            "lockfileVersion: '9.0'\nimporters:\n\n  .:\n    dependencies:\n      a:\n        specifier: 1.0.0\n        version: 1.0.0\n",
+            encoding="utf-8",
+        )
+        result = run_envcheck(self.env.paths, self.cfg, online=False)
+        self.assertEqual(result["checks"]["lock_drift"]["status"], "warn")
+
     def test_missing_profile_degrades_to_skip(self) -> None:
         result = run_envcheck(self.env.paths, self.cfg, online=False)
         self.assertEqual(result["checks"]["plugin_tree"]["status"], "skip")
@@ -698,6 +720,29 @@ class TestCleanup(unittest.TestCase):
         paths = {item["path"] for item in plan["items"]}
         self.assertNotIn(str(self.skill / "SKILL.md"), paths)
         self.assertIn("断舍离", cleanup_markdown(plan))
+
+
+class TestPluginFailureClassification(unittest.TestCase):
+    """A cool-down rejection is the policy working, not a broken upgrade."""
+
+    def test_cooldown_is_deferred(self) -> None:
+        from evo.maintenance import classify_plugin_failure
+
+        self.assertEqual(
+            classify_plugin_failure("ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION: within the minimumReleaseAge cutoff"),
+            "deferred",
+        )
+
+    def test_ignored_builds_is_deferred(self) -> None:
+        from evo.maintenance import classify_plugin_failure
+
+        self.assertEqual(classify_plugin_failure("[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts"), "deferred")
+
+    def test_other_errors_are_not_hidden(self) -> None:
+        from evo.maintenance import classify_plugin_failure
+
+        self.assertEqual(classify_plugin_failure("ERR_PNPM_NO_MATCHING_VERSION 404 Not Found"), "failed")
+        self.assertEqual(classify_plugin_failure(""), "failed")
 
 
 class TestPluginUpgradeGating(unittest.TestCase):

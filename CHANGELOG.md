@@ -9,6 +9,26 @@ Format: Keep a Changelog; versioning: SemVer.
 - 每周先运行 envcheck 再评估能力：插件被宿主拒绝加载时，先升级或卸载该插件，再讨论是否新增工具；模型通道必须显式配置 reasoningEffort。
 
 
+## [1.5.1] — 2026-11-11
+
+### Added
+- **Autonomy policy** (rules/security.md 3.6, mirrored into the global AGENTS block): reversible environment work is
+  done and reported with evidence and a rollback path; only destructive, irreversible, cross-major, outbound,
+  paid or privileged actions stop for confirmation. "Needs your confirmation" is explicitly not a default answer.
+- Tests for the new classification paths (55 total).
+
+### Changed
+- Lock drift is now judged by content: declared dependencies versus the lockfile's root importer. Rewriting a
+  manifest without changing versions no longer looks like drift, and a version mismatch is caught even when
+  timestamps happen to agree. Unrecognized lock shapes fall back to the old mtime heuristic.
+- Plugin upgrades pass --config.strictDepBuilds=false, and a rejection caused by the 24h minimumReleaseAge
+  policy (or ignored build scripts) is recorded as deferred instead of rolling back the whole batch.
+
+### Fixed
+- An environment where pnpm blocks dependency build scripts no longer makes every install/upgrade report failure
+  after the packages were in fact installed correctly.
+
+
 ## [1.5.0] — 2026-11-11
 
 ### Added

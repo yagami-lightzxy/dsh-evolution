@@ -615,6 +615,53 @@ def _check_plugin_channel(ctx: dict[str, Any], paths: Paths, cfg: dict[str, Any]
         ctx["checks"]["plugin_channel"] = {"status": "ok", "detail": f"store 与 pnpm {version} 匹配"}
 
 
+def lock_importers(text: str) -> dict[str, str] | None:
+    """Declared name -> specifier, read from the lockfile's root importer.
+
+    Returns None when the shape is not recognised, so callers can fall back to
+    the mtime heuristic instead of reporting a false drift.
+    """
+    lines = text.replace("\r\n", "\n").split("\n")
+    start = None
+    for index, line in enumerate(lines):
+        if line.strip() == "importers:":
+            start = index
+            break
+    if start is None:
+        return None
+    deps: dict[str, str] = {}
+    in_root = False
+    in_deps = False
+    pending = ""
+    for line in lines[start + 1:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            break
+        if indent == 2:
+            in_root = line.strip() == ".:"
+            in_deps = False
+            pending = ""
+            continue
+        if not in_root:
+            continue
+        if indent == 4:
+            in_deps = line.strip() == "dependencies:"
+            continue
+        if in_deps and indent == 6:
+            match = re.match(r"^\s{6}(\S+):\s*$", line)
+            # pnpm quotes scoped names in the lockfile; the manifest does not.
+            pending = match.group(1).strip("'\"") if match else ""
+            continue
+        if in_deps and indent == 8 and pending:
+            match = re.match(r"^\s{8}specifier:\s*(.+?)\s*$", line)
+            if match:
+                deps[pending] = match.group(1).strip().strip("'\"")
+                pending = ""
+    return deps if deps else None
+
+
 def _check_lock_drift(ctx: dict[str, Any], paths: Paths, cfg: dict[str, Any]) -> None:
     profile = _profile_dir(paths, cfg)
     package = profile / "package.json"
@@ -628,6 +675,40 @@ def _check_lock_drift(ctx: dict[str, Any], paths: Paths, cfg: dict[str, Any]) ->
     except OSError:
         ctx["checks"]["lock_drift"] = {"status": "skip", "detail": "package.json 不可读"}
         return
+
+    # Prefer content over mtime: rewriting a manifest without changing versions
+    # must not look like drift, and changing a version must look like drift even
+    # when timestamps happen to agree.
+    declared = read_json(package, default={}) or {}
+    wanted = {str(k): str(v) for k, v in (declared.get("dependencies") or {}).items()}
+    locked = lock_importers(read_text(lock, max_bytes=4 * 1024 * 1024)) if lock.is_file() else None
+    if locked is not None and wanted:
+        added = sorted(set(wanted) - set(locked))
+        removed = sorted(set(locked) - set(wanted))
+        changed = sorted(k for k in set(wanted) & set(locked) if wanted[k] != locked[k])
+        if added or removed or changed:
+            bits = []
+            if added:
+                bits.append(f"锁文件缺少 {', '.join(added[:5])}")
+            if removed:
+                bits.append(f"锁文件多出 {', '.join(removed[:5])}")
+            if changed:
+                bits.append("规格不一致：" + ", ".join(f"{k} {wanted[k]}!={locked[k]}" for k in changed[:5]))
+            ctx["checks"]["lock_drift"] = {"status": "warn", "detail": "; ".join(bits)}
+            _add(
+                ctx["findings"],
+                "lock_drift",
+                severity="medium",
+                title="依赖清单与锁文件不一致",
+                evidence="; ".join(bits),
+                recommendation="运行 dsh plugin --profile <p> install 让锁文件追上 package.json。",
+                path=str(lock),
+                auto_fixable=True,
+            )
+            return
+        ctx["checks"]["lock_drift"] = {"status": "ok", "detail": f"锁文件与依赖清单一致（{len(locked)} 项）"}
+        return
+
     drift: list[str] = []
     for label, path in (("pnpm-lock.yaml", lock), ("node_modules/.modules.yaml", modules)):
         if not path.is_file():
