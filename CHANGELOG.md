@@ -9,6 +9,17 @@ Format: Keep a Changelog; versioning: SemVer.
 - 每周先运行 envcheck 再评估能力：插件被宿主拒绝加载时，先升级或卸载该插件，再讨论是否新增工具；模型通道必须显式配置 reasoningEffort。
 
 
+## [1.6.1] — 2026-11-11
+
+### Fixed
+- Quarantine nomination required usage data it may not have: with an empty metrics ledger, "no usage record"
+  would have nominated every old fetched skill. An empty ledger now produces no candidates at all and says why.
+  A missing signal is not evidence of disuse.
+
+### Added
+- 1 test (61 total).
+
+
 ## [1.6.0] — 2026-11-11
 
 ### Added

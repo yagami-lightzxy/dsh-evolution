@@ -920,6 +920,12 @@ class TestSkillSources(unittest.TestCase):
         self.assertIn("使用记录", kept["recently-used"])
         self.assertIn("受保护", kept["guarded"])
 
+    def test_no_usage_data_means_no_candidates(self) -> None:
+        entries = [self._entry("old-managed")]
+        plan = plan_quarantine(entries, days=90, usage_available=False)
+        self.assertEqual(plan["candidates"], [])
+        self.assertIn("没有任何使用记录", plan["kept"][0]["why"])
+
     def test_quarantine_then_restore_roundtrip(self) -> None:
         folder = self.env.add_skill("managed-old", "a managed skill that has not been touched in a while", "body")
         (folder / ".evolution-source.json").write_text(

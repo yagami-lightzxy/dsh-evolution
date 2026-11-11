@@ -17,6 +17,7 @@ from .scaffold import create_skill, verify_markdown, verify_skill
 from .skill_health import run_skill_health, skill_health_markdown
 from .skill_sources import (
     collect_entries,
+    usage_index,
     plan_quarantine,
     quarantine,
     restore as restore_skill,
@@ -468,7 +469,12 @@ def _skills(args: argparse.Namespace) -> int:
         _emit(args, data, "\n".join(human))
         return 0 if data.get("ok") else 1
 
-    plan = plan_quarantine(entries, days=int(args.days), protected=protected) if args.quarantine_unused else None
+    has_usage = bool(usage_index(paths))
+    plan = (
+        plan_quarantine(entries, days=int(args.days), protected=protected, usage_available=has_usage)
+        if args.quarantine_unused
+        else None
+    )
     applied: list[dict[str, Any]] = []
     if plan is not None and args.apply:
         with file_lock(paths.lock_file, timeout=60):

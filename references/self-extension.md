@@ -53,7 +53,9 @@ skill 也会过期，但"删掉不用的"这件事不能凭感觉。三条规则
    `state/quarantine/<时间>/<名字>`，带 manifest；`skills --restore <名字> --apply` 原样搬回。
 2. **只对"有来源"的技能动手。** `fetch` 安装时会写 `.evolution-source.json`；
    手写技能没有来源可回装，永远不进候选。
-3. **"没用过"必须有依据。** 使用次数来自 `evolution record --skill` 的任务记录；
+3. **没有使用数据时不出候选。** 整份 metrics 为空，说明从未记录过使用，此时"没有记录"不构成证据，
+   工具直接拒绝产生候选，而不是把每个老技能都当成闲置。
+4. **"没用过"必须有依据。** 使用次数来自 `evolution record --skill` 的任务记录；
    宿主不提供技能调用遥测，所以没有记录 ≠ 真的没用。默认阈值 90 天，且要求"零使用记录"。
 
 更新：`skills --update <名字> --apply` 按 provenance 里的 source/ref/subpath 重新 `fetch`，

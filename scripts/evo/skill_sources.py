@@ -98,11 +98,24 @@ def plan_quarantine(
     *,
     days: int = DEFAULT_UNUSED_DAYS,
     protected: set[str] | None = None,
+    usage_available: bool = True,
 ) -> dict[str, Any]:
-    """Nominate skills to quarantine. Hand-written skills are never nominated."""
+    """Nominate skills to quarantine. Hand-written skills are never nominated.
+
+    usage_available=False means no usage ledger exists at all. In that state
+    "no usage record" says nothing about a skill, so nothing is nominated:
+    an empty ledger must not read as "everything is unused".
+    """
     protected = protected or set()
     candidates: list[dict[str, Any]] = []
     kept: list[dict[str, Any]] = []
+    if not usage_available:
+        return {
+            "candidates": [],
+            "kept": [{"name": str(e["name"]), "why": "没有任何使用记录数据，无法判断是否闲置"} for e in entries],
+            "days": days,
+            "usage_available": False,
+        }
     for entry in entries:
         name = str(entry["name"])
         if entry.get("protected") or name in protected:
@@ -127,7 +140,7 @@ def plan_quarantine(
                 "reason": f"来自外部安装、{age:.0f} 天未修改、无使用记录",
             }
         )
-    return {"candidates": candidates, "kept": kept, "days": days}
+    return {"candidates": candidates, "kept": kept, "days": days, "usage_available": True}
 
 
 def quarantine(paths: Paths, item: dict[str, Any], *, apply: bool = False) -> dict[str, Any]:
