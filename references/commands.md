@@ -119,6 +119,14 @@ evolution.py improve [--days 30] [--online] [--apply] [--purge]
 把环境体检、审计、技能健康、维护计划、任务复盘和学习提案合并成一次闭环。
 无 `--apply` 时只生成 `state/autonomy-latest.json`。加 `--apply` 后执行维护、写入学习规则、隔离已证明闲置的受管技能，并按复盘证据生成新技能。
 
+## update
+
+```text
+evolution.py update [--online] [--apply] [--allow-major]
+```
+
+检查配置的 GitHub 仓库最新 Release。`--apply` 只安装通过 `verify` 和 `selfcheck --strict` 的同 major 版本，安装前创建快照和备份。跨 major 默认只报告，显式传 `--allow-major` 才会安装。周期任务会在 `improve` 前调用它。
+
 ## reflect
 
 ```text
@@ -133,7 +141,7 @@ evolution.py reflect [--days 30] [--min-repeats 3]
 evolution.py evaluate --input evaluation.json [--min-effect 3] [--max-sd 2] [--min-overlap 0.8] [--apply]
 ```
 
-输入 JSON 同时包含训练集与留出集的基线/候选分数，以及变更前后的函数列表。只有基线稳定、训练集达到有效增益、留出集不回退、函数保留率达标时才接受候选。`--apply` 会在接受后创建快照并复制候选文件到 `target`。
+输入 JSON 同时包含训练集与留出集的基线/候选分数，以及变更前后的函数列表。评估会测量基线噪声，并要求训练集效果超过噪声、留出集不回退、函数保留率达标。可选字段 `security_before/after`、`ood_before/after`、`transfer`、`cost_after`、`max_cost` 分别约束安全集、OOD/迁移集、跨模型结果和成本上限。`--apply` 会在接受后创建快照、备份目标文件并复制候选文件到 `target`。
 - `--no-audit` 复用 `state/audit-latest.json`。
 - `--fail-on` 可用于 CI 门禁；默认 `none`，CI 可设 `high`。
 
@@ -245,7 +253,7 @@ evolution.py schedule remove [--driver native|os] [--apply]
 
 - 首选 Agent 原生自动化；`native` 只记录 prompt/时间，需在 Agent 内用 `schedule_create` 等工具创建。
 - `--driver os` 仅回退：Windows 当前用户计划任务；POSIX 带标记 crontab 行。
-- 周任务 = `review --apply --online`：自主维护 + 审计 + 报告；插件升级由 `plugin_manager` 执行。
+- 周任务 = `update --online --apply` + `improve --apply --online`：先同步 evolution 本身，再执行完整自主改进；插件升级由 `plugin_manager` 执行。
 
 ## 知识库
 

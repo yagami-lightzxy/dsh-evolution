@@ -3,7 +3,7 @@ name: evolution
 description: "全局 Agent 自优化与能力管理：识别并移除拖累模型的旧技能和工具，从任务证据中复盘，按需安装或生成新能力，并用可量化验收决定是否晋级。"
 whenToUse: "当需要优化 Agent 或工作流、审计和清理技能/工具、同步跨 Agent 规则、执行周审阅、处理能力缺口、安装或生成技能，或评估技能变更是否真的变强时使用。普通一次性问答不加载完整实现。"
 metadata:
-  version: "1.7.3"
+  version: "1.8.0"
   license: "MIT"
   author: "DSH evolution"
   homepage: "~/.dsh/skills/evolution"
@@ -23,11 +23,13 @@ metadata:
 2. `audit` 与 `health` 检查技能、MCP、插件、权限、引用和脚本。
 3. `reflect` 从任务记录提取反复失败和重复成功的工作流。
 4. `maintain` 去重、更新来源明确的技能、处理安装队列并隔离已经证明闲置的受管技能。
-5. `evolve` 把有证据的失败根因和维护结果沉淀成规则。
-6. 对技能候选运行 `evaluate`，通过训练集、留出集和函数保留门槛后才替换现有版本。
+5. `update` 检查 GitHub 最新 Release，并在自检通过后安装同 major 版本。
+6. `evolve` 把有证据的失败根因和维护结果沉淀成规则。
+7. 对技能候选运行 `evaluate`，通过训练集、留出集和函数保留门槛后才替换现有版本。
 
 ```bash
 python scripts/evolution.py improve --apply --online
+python scripts/evolution.py update --online --apply
 ```
 
 没有 `--apply` 时只生成计划和报告。需要长期运行时使用宿主原生自动化调用同一条命令。
@@ -46,6 +48,7 @@ python scripts/evolution.py improve --apply --online
 - `improve --apply` 可以从重复成功的工作流生成受管技能。生成后先 `verify`，再由 `evaluate` 决定是否用于替换已有技能。
 - 工具或插件升级沿用宿主安装通道。新能力写入 `maintenance.install_queue` 后由维护循环处理。
 - 手写技能和没有来源的技能不参加自动淘汰。需要清理隔离区时使用配置的保留期和 `--purge`。
+- 受管技能如果长期失败率达到配置阈值，也会进入隔离候选；贡献度判断来自真实任务记录。
 
 ## 技能晋级
 
@@ -61,6 +64,7 @@ python scripts/evolution.py evaluate --input evaluation.json --apply
 - 训练集平均增益达到有效效果量。
 - 留出集不回退。
 - 变更后保留原技能声明的核心函数。
+- 可选的安全集、OOD/迁移集、跨模型结果和成本上限也必须通过。
 
 未通过时保留候选和评估记录，不替换当前版本。
 
@@ -84,6 +88,6 @@ python scripts/evolution.py verify --path <skill>
 
 ## 入口命令
 
-`improve`、`reflect`、`evaluate`、`capabilities`、`recommend`、`audit`、`health`、`maintain`、`skills`、`fetch`、`new`、`verify`、`record`、`stats`、`evolve`、`snapshot`、`rollback`、`install`、`schedule`、`selfcheck`。
+`improve`、`update`、`reflect`、`evaluate`、`capabilities`、`recommend`、`audit`、`health`、`maintain`、`skills`、`fetch`、`new`、`verify`、`record`、`stats`、`evolve`、`snapshot`、`rollback`、`install`、`schedule`、`selfcheck`。
 
 完整参数和数据结构见 `references/commands.md`、`references/task-loop.md`、`references/self-extension.md`、`rules/security.md` 和 `references/architecture.md`。

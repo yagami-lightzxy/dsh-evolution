@@ -84,6 +84,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_repeats": 3,
         "unused_days": 90,
         "purge_after_days": 365,
+        "retire_failure_rate": 0.7,
+        "min_failures": 3,
+        "self_update": True,
+        "self_update_repo": "yagami-lightzxy/dsh-evolution",
+        "allow_major_update": False,
     },
     "upgrade_watch": [
         {"kind": "github", "repo": "anthropics/skills", "note": "Agent Skills reference"},

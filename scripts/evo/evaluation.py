@@ -8,13 +8,14 @@ or a local harness can supply scores in the same JSON shape.
 from __future__ import annotations
 
 import shutil
+import math
 from pathlib import Path
 from statistics import fmean, pstdev
 from typing import Any
 
 from .paths import Paths
 from .snapshot import create_snapshot
-from .util import append_jsonl, now_iso, now_stamp, read_json, write_json
+from .util import append_jsonl, now_iso, now_stamp, read_json, sha256_file, write_json
 
 
 def _scores(value: Any) -> list[float]:
@@ -25,6 +26,16 @@ def _scores(value: Any) -> list[float]:
 
 def _mean(values: list[float]) -> float:
     return round(fmean(values), 4)
+
+
+def _ci95(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    return 1.96 * pstdev(values) / math.sqrt(len(values))
+
+
+def _optional_scores(value: Any) -> list[float] | None:
+    return _scores(value) if value else None
 
 
 def _overlap(before: Any, after: Any) -> float:
@@ -44,12 +55,26 @@ def evaluate_candidate(payload: dict[str, Any], *, min_effect: float = 3.0, max_
     threshold = round(max(float(min_effect), 2 * baseline_sd), 4)
     train_delta = round(_mean(train_after) - _mean(train_before), 4)
     holdout_delta = round(_mean(holdout_after) - _mean(holdout_before), 4)
+    effect_ci_low = round(train_delta - (_ci95(train_before) + _ci95(train_after)), 4)
     function_overlap = _overlap(payload.get("functions_before"), payload.get("functions_after"))
+    security_before = _optional_scores(payload.get("security_before"))
+    security_after = _optional_scores(payload.get("security_after"))
+    ood_before = _optional_scores(payload.get("ood_before"))
+    ood_after = _optional_scores(payload.get("ood_after"))
+    transfer = payload.get("transfer") or []
+    transfer_gates = [float(item.get("after", 0)) >= float(item.get("before", 0)) for item in transfer if isinstance(item, dict)]
+    cost_after = payload.get("cost_after")
+    max_cost = payload.get("max_cost")
     gates = {
         "stable_baseline": baseline_sd <= float(max_sd),
         "train_effect": train_delta >= threshold,
+        "effect_above_noise": effect_ci_low >= 0.0,
         "holdout_effect": holdout_delta >= 0.0,
         "function_preservation": function_overlap >= float(min_overlap),
+        "security_holdout": security_before is None or security_after is None or _mean(security_after) >= _mean(security_before),
+        "ood_transfer": ood_before is None or ood_after is None or _mean(ood_after) >= _mean(ood_before),
+        "cross_model_transfer": all(transfer_gates),
+        "cost_budget": max_cost is None or cost_after is None or float(cost_after) <= float(max_cost),
     }
     return {
         "schema": 1,
@@ -60,8 +85,15 @@ def evaluate_candidate(payload: dict[str, Any], *, min_effect: float = 3.0, max_
         "target": str(payload.get("target") or ""),
         "baseline": {"train": train_before, "holdout": holdout_before, "train_mean": _mean(train_before), "holdout_mean": _mean(holdout_before), "sd": baseline_sd},
         "candidate_scores": {"train": train_after, "holdout": holdout_after, "train_mean": _mean(train_after), "holdout_mean": _mean(holdout_after)},
-        "deltas": {"train": train_delta, "holdout": holdout_delta, "required": threshold},
+        "deltas": {"train": train_delta, "holdout": holdout_delta, "required": threshold, "effect_ci_low": effect_ci_low},
         "function_overlap": function_overlap,
+        "optional_checks": {
+            "security": {"before": security_before, "after": security_after},
+            "ood": {"before": ood_before, "after": ood_after},
+            "transfer": transfer,
+            "cost_after": cost_after,
+            "max_cost": max_cost,
+        },
         "gates": gates,
         "accepted": all(gates.values()),
         "reason": "accepted" if all(gates.values()) else "; ".join(name for name, passed in gates.items() if not passed),
@@ -71,7 +103,7 @@ def evaluate_candidate(payload: dict[str, Any], *, min_effect: float = 3.0, max_
 def promote(paths: Paths, report: dict[str, Any], *, apply: bool = False) -> dict[str, Any]:
     candidate = Path(str(report.get("candidate") or ""))
     target = Path(str(report.get("target") or ""))
-    result = {"applied": False, "candidate": str(candidate), "target": str(target), "snapshot": ""}
+    result = {"applied": False, "candidate": str(candidate), "target": str(target), "snapshot": "", "target_before_sha256": ""}
     if not report.get("accepted"):
         result["error"] = "evaluation gates rejected the candidate"
         return result
@@ -84,6 +116,7 @@ def promote(paths: Paths, report: dict[str, Any], *, apply: bool = False) -> dic
     snapshot = create_snapshot(paths, label="pre-skill-promotion")
     backup = ""
     if target.exists():
+        result["target_before_sha256"] = sha256_file(target)
         backup_path = paths.backups_dir / f"promotion-{now_stamp()}" / target.name
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target, backup_path)
@@ -96,6 +129,12 @@ def promote(paths: Paths, report: dict[str, Any], *, apply: bool = False) -> dic
 
 def record_evaluation(paths: Paths, report: dict[str, Any], promotion: dict[str, Any]) -> dict[str, Any]:
     row = {**report, "promotion": promotion}
+    candidate = Path(str(report.get("candidate") or ""))
+    target = Path(str(report.get("target") or ""))
+    row["artifacts"] = {
+        "candidate_sha256": sha256_file(candidate) if candidate.is_file() else "",
+        "target_sha256_before": str(promotion.get("target_before_sha256") or ""),
+    }
     append_jsonl(paths.evaluations_file, row)
     write_json(paths.state_dir / "evolution" / "evaluation-latest.json", row)
     return row

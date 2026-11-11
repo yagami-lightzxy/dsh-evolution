@@ -1,121 +1,118 @@
-# evolution — 全局 Agent 自优化与能力管理
+# evolution
 
-一套可移植、可审计、可回滚的 Agent 全局优化系统，封装为 Agent Skill，兼容 DSH、Claude Code、Codex、通用 `AGENTS.md`、MCP 与 CI。
+> 让 Agent 自动发现拖累它的旧技能和工具，复盘真实任务，生成新能力，并用可验证的结果决定是否采用。
 
-**目标：以最低综合成本，实现最高质量、效率与可靠性。** 不以节省资源为由降低验收标准。
+[![Latest release](https://img.shields.io/github/v/release/yagami-lightzxy/dsh-evolution?display_name=tag)](https://github.com/yagami-lightzxy/dsh-evolution/releases)
+[![Tests](https://img.shields.io/badge/tests-73%20passed-2ea44f)](https://github.com/yagami-lightzxy/dsh-evolution/actions)
+[![License](https://img.shields.io/github/license/yagami-lightzxy/dsh-evolution)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3776ab)](https://www.python.org/)
 
-## 它解决什么
+`evolution` 是一个本地优先的 Agent Skill。它管理整个能力集合，不只改一段提示词。
 
-| 问题 | 机制 |
-|---|---|
-| 重复造轮子 | 任务开始前 `capabilities` / `recommend` 盘点本机能力 |
-| 环境膨胀 | `audit` 识别重复、无效、高风险、闲置技能与 MCP |
-| 无量化改进 | `record` + `stats` 记录成功率/耗时/Token/费用/干预/失败根因 |
-| 升级靠感觉 | 每周 `review` + 可选 GitHub release 检查 + 收益/风险表 |
-| 改坏无法恢复 | 哈希快照、diff、rollback、备份、安全内核校验 |
-| 跨 Agent 规则不一致 | 单一规范源 + `AGENTS.md` 受管块 + 链接/副本同步 |
-| 周审阅靠人记 | **Agent 原生自动化**优先（DSH `schedule_create` 等），OS 计划任务仅回退 |
-| 第三方组件风险 | 静态扫描（危险命令/密钥/明文 HTTP/未固定版本/许可证）+ 默认 dry-run |
+它会持续回答四个问题：
 
-## 快速开始
+1. 当前环境、模型通道、插件和工具链有没有已经拖慢 Agent？
+2. 哪些技能重复、失效、过时或长期带来负面结果？
+3. 最近的失败和重复成功能不能变成更好的规则或新技能？
+4. 一个技能变更是否真的提升了能力，而不是碰巧在练习题上得分更高？
+
+## 适合什么场景
+
+- 同时使用 DSH、Codex、Claude Code 或其他读取 `SKILL.md` 的 Agent。
+- 本地技能越来越多，旧副本覆盖了新版本，或者模型上下文被无关内容占满。
+- 希望 Agent 根据任务记录自己复盘，生成新技能，更新工具，并清理已经拖累工作的能力。
+- 希望技能升级有训练集、留出集、成本和回退证据。
+
+## 一次完整的改进循环
+
+```mermaid
+flowchart LR
+    A[任务记录] --> B[improve]
+    B --> C[环境体检]
+    B --> D[技能与工具审计]
+    B --> E[任务复盘]
+    B --> F[维护与淘汰]
+    E --> G[新技能候选]
+    G --> H[训练集与留出集评估]
+    H --> I{通过验收?}
+    I -->|是| J[晋级并记录证据]
+    I -->|否| K[保留候选，继续观察]
+```
+
+主入口只有一个：
 
 ```bash
-# 1) 自检（无副作用）
-python scripts/evolution.py selfcheck --strict
-
-# 2) 安装：默认 dry-run；确认后加 --apply
-python scripts/evolution.py install
-python scripts/evolution.py install --apply
-# Windows 一键（默认 dry-run）：.\install.ps1  确认后：.\install.ps1 -Apply
-# POSIX：./install.sh           确认后：./install.sh --apply
-python scripts/evolution.py doctor
-
-# 3) 盘点与建议
-python scripts/evolution.py capabilities
-python scripts/evolution.py recommend --task "审计本机技能并给出清理建议"
-
-# 4) 审计 / 周审阅
-python scripts/evolution.py audit
-python scripts/evolution.py review
-
-# 5) 一次完整的自主改进循环
-python scripts/evolution.py improve
 python scripts/evolution.py improve --apply --online
 
-# 6) 原生每周自动化（首选）
-python scripts/evolution.py schedule native --apply
-# 然后在 DSH 中调用 schedule_create，使用 state/native-schedule.md 的 prompt。
-# 仅无原生调度时：schedule install --driver os --apply
+# 检查并安装最新 Release
+python scripts/evolution.py update --online --apply
 ```
 
-> Windows 下把 `python` 换成实际解释器路径，或使用 `~/.agents/evolution/bin/evolution.cmd`（安装后生成，需自行加入 PATH）。
+它会依次完成环境检查、技能健康检查、审计、任务复盘、去重、来源更新、工具安装队列、技能生成和学习规则沉淀。
 
-## 目录
+没有 `--apply` 时只生成计划和报告。长期运行可以用 Agent 原生自动化，或在没有原生调度的平台上安装 Windows 计划任务或 cron。周期任务会先检查并安装同 major 的最新 Release，再运行完整改进循环。
 
-```
-~/.agents/skills/evolution/        # 规范源（技能本体）
-  SKILL.md                         # 跨 Agent 入口，按需加载
-  rules/                           # 全局规则（原则/优先级/周审阅/安全/知识）
-  references/                      # 架构、命令、迁移、MCP、排障
-  templates/                       # AGENTS 块、原生自动化、项目规则模板
-  scripts/evolution.py             # CLI 入口（stdlib only）
-  scripts/evo/                     # CLI 模块
-  tests/                           # 19+ 单元/集成测试
-~/.agents/evolution/               # 运行时数据
-  config.json
-  state/                           # 指标、快照、安装清单、安全锁、调度状态
-  reports/                         # 审计与周报（Markdown + JSON）
-  knowledge/                       # 跨项目经验/决策
-  backups/  logs/  exports/  bin/
-```
+## 快速安装
 
-## 跨 Agent 安装矩阵
-
-| Agent | 技能位置 | 规则入口 | 说明 |
-|---|---|---|---|
-| DSH | `~/.dsh/skills/evolution`（链接/副本） | `SKILL.md` + `~/.dsh/AGENTS.md` 受管块（本机实测会注入） | 也会扫描 `~/.agents/skills`（rank 500） |
-| 通用 | `~/.agents/skills/evolution` | `~/.agents/AGENTS.md` | 单一规范源 |
-| Claude Code | `~/.claude/skills/evolution` | `~/.claude/CLAUDE.md` 指向 Codex 全局规则 | 链接或副本 |
-| Codex | `~/.codex/skills/evolution` | `~/.codex/AGENTS.md` 受管块 | 现有全局规则保留 |
-| 任意 MCP 客户端 | — | `evolution mcp`（stdio） | 8 个只读/低风险工具 |
-| CI | — | `review --fail-on high` | 报告作为 artifact |
-
-`AGENTS.md` 受管块只替换 `<!-- EVOLUTION:BEGIN ... -->` 与 `<!-- EVOLUTION:END -->` 之间的内容，块外原文保留；写入前自动备份。
-
-## 命令总览
-
-`init/status/doctor/capabilities/recommend/audit/review/improve/reflect/evaluate/evolve/maintain/plugins/fetch/record/stats/snapshot/history/diff/rollback/install/uninstall/export/import/release/schedule/knowledge/validate/selfcheck/test/prune/mcp`
-
-CI 模板：`templates/github-actions.yml`（复制到 `.github/workflows/`）；安装包装器：`install.ps1` / `install.sh` / `install.cmd`。
-
-完整参数、退出码、示例见 [`references/commands.md`](references/commands.md)。
-
-### 默认安全行为
-
-- `install/uninstall/rollback/import/schedule/prune` **默认 dry-run**，需 `--apply`。
-- 审计/扫描**不执行**被审代码，不联网（除非 `--online`）。
-- 报告对密钥形态脱敏；不读取无关隐私文件。
-- 每次受管变更前自动快照；写入原子化；并发单实例锁。
-- 安全内核（`rules/security.md`、`rules/precedence.md`、AGENTS 块模板、安全配置）有哈希锁；变更后必须 `--accept-safety-change` 才能安装，防止 Agent 静默放宽自己的边界。
-- **周任务默认自我进化 + 自主维护**（用户 2026-11-07/08 授权）：先从指标、审计、维护证据生成学习规则；有新学习项时跑完整测试并升级自身版本；再去重、隔离、检查/升级插件与技能、处理按需下载和重复工作流生成。活动技能先记录来源并隔离，达到保留期后 `--purge` 才清理。跨 major、付费、敏感外发和用户手写技能不自动处理。
-
-## 每周自我进化与审阅
+先在仓库目录完成自检：
 
 ```bash
-python scripts/evolution.py improve --apply --online       # 环境→审计→复盘→维护→学习
-python scripts/evolution.py reflect --days 30              # 从任务记录提取技能提案
-python scripts/evolution.py evolve --apply --bump patch --release  # 学习→测试→自升级→发布
-python scripts/evolution.py evolve --evaluate                      # 实验复盘
-python scripts/evolution.py review --apply --online   # 维护 + 审阅
-python scripts/evolution.py maintain --apply --online # 只做维护
-python scripts/evolution.py plugins --online          # 插件升级候选
-python scripts/evolution.py fetch --source github:owner/repo --name skill --apply
-python scripts/evolution.py review --week 2026-W45
+python scripts/evolution.py selfcheck --strict
 ```
 
-`evolve` 的证据门：样本 <5 只记录、不调策略；失败集中在某类错误才生成对应规则；低风险规则写入 `knowledge/learned.md` 与 `rules/learned.md`；版本升级必须通过完整测试，失败恢复旧版本；实验以 `state/evolution/experiments.jsonl` 跟踪，`--evaluate` 用后续指标判断 keep/regress。
+安装到 DSH、Codex、Claude Code 和共享技能目录：
 
-技能内容的优化使用 `evaluate`。候选技能必须提供训练集和留出集分数，基线波动、实际增益和函数保留率同时通过才会晋级。评估输入是一个 JSON 文件，例如：
+```bash
+python scripts/evolution.py install --apply
+python scripts/evolution.py doctor
+```
+
+Windows 一键安装：
+
+```powershell
+.\install.ps1 -Apply
+```
+
+POSIX 系统一键安装：
+
+```bash
+./install.sh --apply
+```
+
+## 最常用的四个命令
+
+```bash
+# 查看能力和运行环境
+python scripts/evolution.py capabilities
+python scripts/evolution.py envcheck --online
+
+# 生成一次改进计划并执行
+python scripts/evolution.py improve --apply --online
+
+# 从任务记录中看出哪些工作值得固化成技能
+python scripts/evolution.py reflect --days 30
+
+# 验收一个技能候选
+python scripts/evolution.py evaluate --input evaluation.json --apply
+```
+
+其他命令用于单独操作，例如 `health` 检查技能完整性，`fetch` 安装外部技能，`new` 生成技能骨架，`skills` 查看来源和使用情况，`update` 检查自更新，`rollback` 回退受管文件。
+
+## 它会怎样处理旧技能
+
+技能只有在有来源记录时才会进入自动维护。
+
+- 内容相同的副本合并为一个规范源，其余位置使用链接。
+- 来源明确、长期没有更新、没有使用记录的技能会进入隔离候选。
+- 技能虽然被使用，但长期失败率达到配置阈值，也会进入隔离候选。
+- 隔离目录保留来源和还原路径。超过保留期后可用 `improve --purge` 清理。
+- 手写技能和无来源技能不会被自动淘汰。
+
+这套规则让模型不再被过时能力拖着走，同时保留了恢复路径。
+
+## 技能怎样晋级
+
+`evaluate` 接收一次候选评估结果。最小输入如下：
 
 ```json
 {
@@ -131,61 +128,100 @@ python scripts/evolution.py review --week 2026-W45
 }
 ```
 
+候选必须通过以下门槛：
+
+- 基线多次运行的波动在允许范围内。
+- 训练集增益超过设定效果量，并且超过测量噪声。
+- 留出集不回退。
+- 原技能的核心函数仍然存在。
+
+需要更严格的评估时，可以额外提供 `security_before/after`、`ood_before/after`、`transfer` 和 `max_cost`。这些字段分别约束安全集、OOD 或迁移集、跨模型迁移和成本上限。
+
+候选不会直接覆盖当前技能。通过后先创建快照和目标文件备份，再晋级。每次评估还会记录候选文件和目标文件的 SHA-256，方便重放和审计。
+
+## 任务复盘和新技能
+
+每条任务记录可以包含结果、质量、失败根因、使用的技能、模型和标签：
+
 ```bash
-python scripts/evolution.py evaluate --input evaluation.json --apply
+python scripts/evolution.py record \
+  --task "weekly audit" \
+  --outcome success \
+  --quality 4.5 \
+  --skill audit-skill \
+  --tags audit,weekly
 ```
 
-报告：`~/.agents/evolution/reports/weekly/YYYY-Www.md` 与 `.json`；索引 `reports/index.md`。
+当同一工作流重复成功，`improve --apply` 会生成带来源记录的技能目录。先用 `verify` 验证结构，再用 `evaluate` 决定是否替换已有技能。
 
-**Agent 原生自动化优先**：DSH 用 `schedule_create`，Codex/Claude 用各自 automations。`schedule native --apply` 会生成可直接使用的 prompt 和记录；OS 计划任务/cron 只在平台无原生调度时使用。
+## 工具和插件
 
-## 安全模型
+工具安装通过配置队列完成，结果包含命令、退出码和输出尾部：
 
-1. **规范源与运行时分离**：技能代码可版本化，数据/报告不混入技能目录。
-2. **安全内核哈希锁**：规则与授权边界不被自优化流程静默修改。
-3. **事务式变更**：快照 → 预检 → 临时写入 → 验证 → 提交；失败回滚。
-4. **最小权限**：不主动提权，不读取凭据，不执行第三方代码。
-5. **可审计**：每次安装/回滚/导出都有 manifest 与哈希；报告列明未检查项。
-6. **不伪造**：无法执行的检查明确标注；不把静态扫描说成运行时验证。
-7. **显式风险接受**：`config.security.accepted_risks` 必须写 reason/日期/可选到期；报告仍标 `(accepted)` 并保留理由，但不参与评分与 fail-on；critical 不可接受。
+```json
+{
+  "maintenance": {
+    "install_queue": [
+      {
+        "kind": "tool",
+        "name": "example-tool",
+        "command": ["winget", "install", "--id", "Example.Tool", "--exact"]
+      }
+    ]
+  }
+}
+```
 
-详细规则：[`rules/security.md`](rules/security.md)、[`rules/precedence.md`](rules/precedence.md)。
+插件升级沿用宿主的安装通道。`envcheck --online` 和 `plugins --online` 负责发现陈旧版本，`improve` 负责把结果放进维护报告。
 
-## 测试
+## 多 Agent 共享
+
+| Agent | 入口 |
+|---|---|
+| DSH | `~/.dsh/skills/evolution` |
+| 通用 Agent | `~/.agents/skills/evolution` |
+| Claude Code | `~/.claude/skills/evolution` |
+| Codex | `~/.codex/skills/evolution` |
+| MCP 客户端 | `python scripts/evolution.py mcp` |
+
+安装后这些入口可以链接到同一个规范源。运行时数据保存在 `~/.agents/evolution`，包括配置、指标、快照、报告、备份、日志和调度状态。
+
+## 为什么采用这些机制
+
+同类项目已经证明，技能进化最容易被三件事欺骗：测量噪声、练习集过拟合和模型自评。`evolution` 将多次运行、留出集、函数保留、隐藏安全集、迁移集、成本上限、来源追踪和可回退记录合并到一条本地工作流里。
+
+它保留了环境治理和跨 Agent 同步能力，同时把技能质量优化留给可重放的评估数据。简单任务不会因为加载完整 Skill 而占用上下文，只有相关能力才按需读取。
+
+## 运行时目录
+
+```text
+~/.dsh/skills/evolution/        # DSH 规范源
+~/.agents/evolution/            # 运行时状态
+  config.json                   # 配置
+  state/                        # 指标、快照、评估、计划、锁
+  reports/                      # 周报、审计、环境体检
+  knowledge/                    # 长期经验
+  backups/ logs/ bin/           # 备份、日志、调度脚本
+```
+
+## 验证
 
 ```bash
 python -m unittest discover -s tests -v
 python scripts/evolution.py selfcheck --strict
+python scripts/evolution.py doctor
 ```
 
-测试覆盖（70 项）：frontmatter、发现/去重、危险命令与密钥脱敏、指标、快照/diff/回滚、安装/规则块/卸载、dry-run 无副作用、导出/导入与 zip-slip、周报、周号校验、原生调度、MCP 初始化/工具调用、显式接受风险、自动维护去重/隔离、按需下载、自我进化诊断/版本升级、留出集技能评估、复盘提案、自动生成技能、工具安装队列、隔离区清理、改进闭环与快照重试。
+当前测试覆盖 73 项，包含技能发现、环境审计、快照回退、工具队列、任务复盘、技能生成、评估门槛、隔离清理、自更新和完整改进闭环。
 
-## 已知限制
+## 详细文档
 
-- 静态扫描不能替代沙箱/运行时行为分析；不会执行被审代码。
-- 关键词推荐不是语义检索；中文按二字切分，可能漏匹配。
-- DSH 原生调度是会话级提醒；长期无人值守需常驻会话或平台持久自动化。
-- `AGENTS.md` 是否被某 Agent 读取取决于该 Agent 的实现；`SKILL.md` 是 DSH 的可靠入口。
-- 回滚只恢复清单内文件，不删除快照后新增的文件（避免误删）。
-- GitHub 检查受未认证速率限制（60 次/小时），默认离线。
-
-## 卸载 / 迁移
-
-```bash
-python scripts/evolution.py uninstall                 # dry-run
-python scripts/evolution.py uninstall --apply         # 移除链接/副本与受管块，保留数据
-python scripts/evolution.py uninstall --purge --yes --apply  # 额外删除 config/调度状态
-python scripts/evolution.py export --out evolution.zip
-python scripts/evolution.py import --from evolution.zip --verify-only
-python scripts/evolution.py import --from evolution.zip --apply --force
-```
-
-迁移细节见 [`references/portability.md`](references/portability.md)。
-
-## 版本
-
-`VERSION` + `CHANGELOG.md` + 快照。语义化版本；破坏性变更升 major。发布用 `export` 生成带 SHA-256 清单的包。
+- [`SKILL.md`](SKILL.md) 说明 Agent 何时触发本技能以及默认闭环。
+- [`references/commands.md`](references/commands.md) 列出完整命令和参数。
+- [`references/architecture.md`](references/architecture.md) 说明数据流和状态目录。
+- [`references/self-extension.md`](references/self-extension.md) 说明怎样安装或创建新能力。
+- [`rules/security.md`](rules/security.md) 说明风险、来源和回退规则。
 
 ## License
 
-MIT。详见 `LICENSE`。
+MIT

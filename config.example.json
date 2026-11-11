@@ -130,7 +130,12 @@
     "create_skills": true,
     "min_repeats": 3,
     "unused_days": 90,
-    "purge_after_days": 365
+    "purge_after_days": 365,
+    "retire_failure_rate": 0.7,
+    "min_failures": 3,
+    "self_update": true,
+    "self_update_repo": "yagami-lightzxy/dsh-evolution",
+    "allow_major_update": false
   },
   "upgrade_watch": [
     {

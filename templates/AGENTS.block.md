@@ -1,4 +1,4 @@
-<!-- EVOLUTION:BEGIN version=1.7.1 -->
+<!-- EVOLUTION:BEGIN version=1.8.0 -->
 ## 全局进化与能力管理（evolution）
 
 本段由 evolution 管理。修改规则请改 `~/.dsh/skills/evolution/rules/`，然后运行
@@ -15,6 +15,7 @@
 ### 能力选择
 
 - 先盘点 `capabilities` 或 `recommend --task`，按需加载技能正文。
+- 周期任务先运行 `update --online --apply`，同步已验证的同 major Release。
 - 复用已有能力。只有确认缺口时才 `fetch`、`new` 或加入安装队列。
 - 重复成功的工作流可以生成受管技能。候选技能通过训练集、留出集和函数保留门槛后才替换已有版本。
 - 记录任务结果、失败根因、技能、Agent、模型和标签，复盘只使用已有证据。

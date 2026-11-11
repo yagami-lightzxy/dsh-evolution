@@ -13,6 +13,7 @@ from .skill_health import run_skill_health
 from .skill_sources import collect_entries, plan_quarantine, purge_quarantine, quarantine, usage_index
 from .maintenance import run_maintenance
 from .util import now_iso, write_json
+from .updater import apply_self_update, check_self_update
 
 
 def plan_improvement(paths: Paths, cfg: dict[str, Any], *, days: int = 30, online: bool = False) -> dict[str, Any]:
@@ -24,12 +25,15 @@ def plan_improvement(paths: Paths, cfg: dict[str, Any], *, days: int = 30, onlin
     maintenance = run_maintenance(paths, cfg, apply=False, online=online, scopes=list(get(cfg, "maintenance.scope", ["skills", "plugins"])))
     reflection = reflect(paths, days=days, min_repeats=int(get(cfg, "autonomy.min_repeats", 3)))
     evolution = run_evolution(paths, cfg, apply=False, bump="none", release=False, days=days)
+    self_update = check_self_update(paths, cfg, online=online) if bool(get(cfg, "autonomy.self_update", True)) else {"status": "disabled"}
     entries = collect_entries(paths, cfg)
     unused = plan_quarantine(
         entries,
         days=int(get(cfg, "autonomy.unused_days", 90)),
         protected={str(x) for x in (get(cfg, "maintenance.protected_skills", []) or [])},
         usage_available=bool(usage_index(paths)),
+        retire_failure_rate=float(get(cfg, "autonomy.retire_failure_rate", 0.7)),
+        min_failures=int(get(cfg, "autonomy.min_failures", 3)),
     )
     actions = list(maintenance.get("plan", {}).get("actions", []))
     actions.extend({"action": "quarantine-unused", **item} for item in unused.get("candidates", []))
@@ -44,6 +48,7 @@ def plan_improvement(paths: Paths, cfg: dict[str, Any], *, days: int = 30, onlin
         "maintenance": maintenance,
         "reflection": reflection,
         "evolution": evolution,
+        "self_update": self_update,
         "skills": {"entries": entries, "unused": unused},
         "actions": actions,
         "limits": [
@@ -56,6 +61,13 @@ def plan_improvement(paths: Paths, cfg: dict[str, Any], *, days: int = 30, onlin
 
 
 def apply_improvement(paths: Paths, cfg: dict[str, Any], plan: dict[str, Any], *, online: bool = False, purge: bool = False) -> dict[str, Any]:
+    self_update = apply_self_update(
+        paths,
+        cfg,
+        online=online,
+        apply=bool(get(cfg, "autonomy.self_update", True)),
+        allow_major=bool(get(cfg, "autonomy.allow_major_update", False)),
+    )
     maintenance = run_maintenance(
         paths,
         cfg,
@@ -82,6 +94,7 @@ def apply_improvement(paths: Paths, cfg: dict[str, Any], plan: dict[str, Any], *
         "kind": "improvement-run",
         "generated_at": now_iso(),
         "maintenance": maintenance,
+        "self_update": self_update,
         "quarantined": quarantined,
         "evolution": evolution,
         "generated_skills": generated,
@@ -98,7 +111,7 @@ def improvement_markdown(plan: dict[str, Any], result: dict[str, Any] | None = N
     for action in plan.get("actions", [])[:20]:
         lines.append(f"- {action.get('action')} · {action.get('name') or action.get('target') or ''} · {action.get('reason') or ''}")
     if result:
-        lines.extend(["", f"## 已执行", f"- 技能隔离：{len(result.get('quarantined', []))}", f"- 新建技能：{len([x for x in result.get('generated_skills', []) if x.get('applied')])}", f"- 清理隔离区：{len(result.get('purged', {}).get('purged', []))}", f"- 维护错误：{len(result.get('maintenance', {}).get('apply_result', {}).get('errors', []))}"])
+        lines.extend(["", f"## 已执行", f"- 自更新：{result.get('self_update', {}).get('version') or result.get('self_update', {}).get('check', {}).get('status', '—')}", f"- 技能隔离：{len(result.get('quarantined', []))}", f"- 新建技能：{len([x for x in result.get('generated_skills', []) if x.get('applied')])}", f"- 清理隔离区：{len(result.get('purged', {}).get('purged', []))}", f"- 维护错误：{len(result.get('maintenance', {}).get('apply_result', {}).get('errors', []))}"])
     if not plan.get("actions"):
         lines.append("- 当前没有需要执行的维护动作。")
     return "\n".join(lines) + "\n"

@@ -3,6 +3,15 @@
 All notable changes to `evolution` are documented here.
 Format: Keep a Changelog; versioning: SemVer.
 
+## [1.8.0] — 2026-11-11
+
+### Added
+
+- Evaluation now measures improvement against noise and supports security, OOD/transfer, cross-model, and cost gates with artifact hashes.
+- Skill retirement can use persistent failure contribution in addition to age and usage evidence.
+- The GitHub README and architecture guide now describe the whole skill in plain language and treat `improve` as the single operational entry point.
+- The weekly task checks and verifies the newest Release before running `improve`; `git ls-remote` is used when the GitHub API is rate limited.
+
 ## [1.7.3] — 2026-11-11
 
 ### Fixed

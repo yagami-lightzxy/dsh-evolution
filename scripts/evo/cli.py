@@ -68,6 +68,7 @@ from .snapshot import (
     verify_bundle,
 )
 from .util import file_lock, now_iso, now_stamp, read_text, sha256_file, write_json
+from .updater import apply_self_update, self_update_markdown
 
 
 def _emit(args: argparse.Namespace, data: Any, human: str = "") -> None:
@@ -619,7 +620,7 @@ def _evaluate(args: argparse.Namespace) -> int:
     result = record_evaluation(paths, report, promotion)
     human = (
         f"技能评估 · {report.get('skill') or report.get('candidate') or 'candidate'}\n"
-        f"- 训练集增益：{report['deltas']['train']} · 留出集增益：{report['deltas']['holdout']}\n"
+        f"- 训练集增益：{report['deltas']['train']} · 超过噪声：{report['deltas'].get('effect_ci_low')} · 留出集增益：{report['deltas']['holdout']}\n"
         f"- 基线波动：{report['baseline']['sd']} · 函数保留：{report['function_overlap']}\n"
         f"- 结论：{'接受' if report['accepted'] else '拒绝'}（{report['reason']}）\n"
     )
@@ -652,6 +653,15 @@ def _improve(args: argparse.Namespace) -> int:
         human += "\n这是 dry-run；加 --apply 执行维护与学习写入。\n"
     _emit(args, {"plan": plan, "result": result}, human)
     return 0 if not (result and result.get("maintenance", {}).get("apply_result", {}).get("errors")) else 1
+
+
+def _update(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    cfg = _cfg(paths)
+    with file_lock(paths.lock_file, timeout=600):
+        result = apply_self_update(paths, cfg, online=bool(args.online), apply=bool(args.apply), allow_major=bool(args.allow_major))
+    _emit(args, result, self_update_markdown(result))
+    return 0 if result.get("check", {}).get("status") != "error" else 1
 
 
 def _record(args: argparse.Namespace) -> int:
@@ -1145,6 +1155,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--apply", action="store_true")
     p.add_argument("--purge", action="store_true", help="allow configured quarantine purge")
     p.set_defaults(func=_improve)
+
+    p = sub.add_parser("update", help="check and install the newest evolution release")
+    p.add_argument("--online", action="store_true")
+    p.add_argument("--apply", action="store_true", help="install a same-major release after verification")
+    p.add_argument("--allow-major", action="store_true", help="allow a cross-major self-update")
+    p.set_defaults(func=_update)
 
     p = sub.add_parser("maintain", help="autonomous dedupe/quarantine/upgrade planning")
     p.add_argument("--apply", action="store_true")

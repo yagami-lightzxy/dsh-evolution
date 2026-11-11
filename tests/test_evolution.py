@@ -41,6 +41,7 @@ from evo.paths import build_paths  # noqa: E402
 from evo.review import run_review  # noqa: E402
 from evo.scaffold import create_skill, verify_skill  # noqa: E402
 from evo.skill_health import local_references, run_skill_health  # noqa: E402
+from evo.updater import check_self_update, version_tuple  # noqa: E402
 from evo.skill_sources import (  # noqa: E402
     plan_quarantine,
     purge_quarantine,
@@ -938,6 +939,12 @@ class TestSkillSources(unittest.TestCase):
         self.assertIn("使用记录", kept["recently-used"])
         self.assertIn("受保护", kept["guarded"])
 
+    def test_quarantine_can_retire_a_used_skill_with_persistent_failures(self) -> None:
+        entries = [self._entry("dragging-skill", used_count=5, last_used="2026-01-01", failure_rate=0.8)]
+        plan = plan_quarantine(entries, days=90)
+        self.assertEqual([item["name"] for item in plan["candidates"]], ["dragging-skill"])
+        self.assertIn("失败率", plan["candidates"][0]["reason"])
+
     def test_no_usage_data_means_no_candidates(self) -> None:
         entries = [self._entry("old-managed")]
         plan = plan_quarantine(entries, days=90, usage_available=False)
@@ -1015,6 +1022,25 @@ class TestEvaluation(unittest.TestCase):
         self.assertFalse(report["accepted"])
         self.assertIn("holdout_effect", report["reason"])
 
+    def test_optional_security_holdout_and_cost_budget_are_real_gates(self) -> None:
+        report = evaluate_candidate(
+            {
+                "train_before": [70, 70, 70],
+                "train_after": [75, 75, 75],
+                "holdout_before": [70, 70],
+                "holdout_after": [72, 72],
+                "security_before": [1.0, 1.0],
+                "security_after": [0.5, 0.5],
+                "cost_after": 12,
+                "max_cost": 10,
+                "functions_before": ["search"],
+                "functions_after": ["search"],
+            }
+        )
+        self.assertFalse(report["accepted"])
+        self.assertIn("security_holdout", report["reason"])
+        self.assertIn("cost_budget", report["reason"])
+
     def test_promote_only_accepts_candidate(self) -> None:
         candidate = self.env.root / "candidate.md"
         target = self.env.root / "target.md"
@@ -1034,6 +1060,7 @@ class TestEvaluation(unittest.TestCase):
         )
         result = promote(self.env.paths, report, apply=True)
         self.assertTrue(result["applied"])
+        self.assertTrue(result["target_before_sha256"])
         self.assertEqual(target.read_text(encoding="utf-8"), "candidate\n")
 
 
@@ -1079,6 +1106,19 @@ class TestImprovementLoop(unittest.TestCase):
         result = apply_improvement(self.env.paths, self.env.cfg, plan, online=False)
         self.assertIn("evolution", result)
         self.assertTrue(self.env.paths.autonomy_file.is_file())
+
+
+class TestSelfUpdate(unittest.TestCase):
+    def setUp(self) -> None:
+        self.env = Env()
+
+    def tearDown(self) -> None:
+        self.env.cleanup()
+
+    def test_version_tuple_and_offline_check(self) -> None:
+        self.assertEqual(version_tuple("v1.8.0"), (1, 8, 0))
+        result = check_self_update(self.env.paths, self.env.cfg, online=False)
+        self.assertEqual(result["status"], "offline")
 
 
 if __name__ == "__main__":

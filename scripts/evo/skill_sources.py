@@ -56,8 +56,17 @@ def usage_index(paths: Paths) -> dict[str, dict[str, Any]]:
         name = str(record.get("skill") or "").strip()
         if not name:
             continue
-        slot = out.setdefault(name, {"count": 0, "last": ""})
+        slot = out.setdefault(name, {"count": 0, "last": "", "success": 0, "failed": 0, "quality": []})
         slot["count"] += 1
+        if record.get("outcome") == "success":
+            slot["success"] += 1
+        if record.get("outcome") in {"failed", "blocked", "rolled_back"}:
+            slot["failed"] += 1
+        if record.get("quality") is not None:
+            try:
+                slot["quality"].append(float(record["quality"]))
+            except (TypeError, ValueError):
+                pass
         ts = str(record.get("ts") or "")
         if ts > slot["last"]:
             slot["last"] = ts
@@ -88,6 +97,10 @@ def collect_entries(paths: Paths, cfg: dict[str, Any]) -> list[dict[str, Any]]:
                 "installed_at": str((prov or {}).get("installed_at") or ""),
                 "used_count": int(used.get("count") or 0),
                 "last_used": str(used.get("last") or ""),
+                "success_count": int(used.get("success") or 0),
+                "failure_count": int(used.get("failed") or 0),
+                "failure_rate": round(int(used.get("failed") or 0) / max(1, int(used.get("count") or 0)), 4),
+                "quality_avg": round(sum(used.get("quality") or []) / len(used.get("quality") or []), 3) if used.get("quality") else None,
                 "protected": skill.name in protected,
             }
         )
@@ -100,6 +113,8 @@ def plan_quarantine(
     days: int = DEFAULT_UNUSED_DAYS,
     protected: set[str] | None = None,
     usage_available: bool = True,
+    retire_failure_rate: float = 0.7,
+    min_failures: int = 3,
 ) -> dict[str, Any]:
     """Nominate skills to quarantine. Hand-written skills are never nominated.
 
@@ -125,7 +140,20 @@ def plan_quarantine(
         if not entry.get("managed"):
             kept.append({"name": name, "why": "手写技能，没有来源可回装"})
             continue
-        if int(entry.get("used_count") or 0) > 0 or entry.get("last_used"):
+        used_count = int(entry.get("used_count") or 0)
+        failure_rate = float(entry.get("failure_rate") or 0)
+        if used_count >= int(min_failures) and failure_rate >= float(retire_failure_rate) and float(entry.get("age_days") or 0) >= days:
+            candidates.append(
+                {
+                    "name": name,
+                    "path": entry["path"],
+                    "age_days": float(entry.get("age_days") or 0),
+                    "source": entry.get("source") or {},
+                    "reason": f"来自外部安装、{float(entry.get('age_days') or 0):.0f} 天未更新、失败率 {failure_rate:.0%}",
+                }
+            )
+            continue
+        if used_count > 0 or entry.get("last_used"):
             kept.append({"name": name, "why": f"有使用记录（{entry.get('used_count')} 次）"})
             continue
         age = float(entry.get("age_days") or 0)
@@ -264,14 +292,14 @@ def sources_markdown(entries: list[dict[str, Any]], plan: dict[str, Any] | None 
     managed = sum(1 for e in entries if e.get("managed"))
     lines.append(f"- 共 {len(entries)} 个技能，其中 {managed} 个有外部来源记录，{len(entries) - managed} 个手写")
     lines.append("")
-    lines.append("| 技能 | 来源 | 版本 | 年龄(天) | 使用次数 | 最近使用 | 保护 |")
-    lines.append("|---|---|---|---|---|---|---|")
+    lines.append("| 技能 | 来源 | 版本 | 年龄(天) | 使用次数 | 失败率 | 最近使用 | 保护 |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for entry in entries:
         source = entry.get("source") or {}
         label = str(source.get("source") or ("手写" if not entry.get("managed") else "未知"))
         lines.append(
             f"| {entry['name']} | {label[:48]} | {entry.get('version') or '-'} | {entry.get('age_days')} | "
-            f"{entry.get('used_count')} | {entry.get('last_used') or '-'} | {'是' if entry.get('protected') else '-'} |"
+            f"{entry.get('used_count')} | {float(entry.get('failure_rate') or 0):.0%} | {entry.get('last_used') or '-'} | {'是' if entry.get('protected') else '-'} |"
         )
     lines.append("")
     if plan is not None:

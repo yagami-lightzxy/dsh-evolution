@@ -10,7 +10,7 @@
 ```json
 {
   "title": "evolution 全局审阅",
-  "prompt": "执行 evolution 每周自主改进：\\n1) 运行 `python C:\\Users\\28060\\.agents\\skills\\evolution\\scripts\\evolution.py improve --apply --online --quiet`\\n2) 读取 `state/autonomy-latest.json`、`state/improvement-latest.json` 与最新周报\\n3) 若 plugin candidates 非空：用 DSH plugin_manager 只升级同 major、来源可信、可回滚的插件；跨 major 跳过并记录\\n4) 输出 ≤12 行摘要：环境分数、复盘提案、生成/隔离/清理、插件、错误和下一步\\n边界：付费、外发敏感数据、跨 major、未备份删除、删除用户手写技能停止；测试失败不得保留新版本；不伪造结果。",
+  "prompt": "执行 evolution 每周自主改进：\\n1) 运行 `python C:\\Users\\28060\\.agents\\skills\\evolution\\scripts\\evolution.py update --apply --online --quiet`\\n2) 运行 `python C:\\Users\\28060\\.agents\\skills\\evolution\\scripts\\evolution.py improve --apply --online --quiet`\\n3) 读取 `state/autonomy-latest.json`、`state/improvement-latest.json` 与最新周报\\n4) 若 plugin candidates 非空：用 DSH plugin_manager 只升级同 major、来源可信、可回滚的插件；跨 major 跳过并记录\\n5) 输出 ≤12 行摘要：自更新、环境分数、复盘提案、生成/隔离/清理、插件、错误和下一步\\n边界：付费、外发敏感数据、跨 major、未备份删除、删除用户手写技能停止；测试失败不得保留新版本；不伪造结果。",
   "weekly": {"weekdays": [7], "time": "20:00:00", "time_zone": "Asia/Shanghai"}
 }
 ```
@@ -29,11 +29,12 @@
 
 ```
 执行 evolution 每周自我进化与自主维护。步骤：
-1) 运行 python ~/.agents/skills/evolution/scripts/evolution.py improve --apply --online --quiet
-2) 读取 state/autonomy-latest.json、state/improvement-latest.json 与 reports/weekly/*.md
-3) 有插件候选时用 plugin_manager 只升级同 major；升级前 snapshot，失败回滚
-4) 检查复盘、生成技能、隔离/清理和工具安装结果
-5) 输出 ≤12 行摘要：环境分数、复盘提案、生成/隔离/清理、插件、错误、下周 1-3 个动作
+1) 运行 python ~/.agents/skills/evolution/scripts/evolution.py update --apply --online --quiet
+2) 运行 python ~/.agents/skills/evolution/scripts/evolution.py improve --apply --online --quiet
+3) 读取 state/autonomy-latest.json、state/improvement-latest.json 与 reports/weekly/*.md
+4) 有插件候选时用 plugin_manager 只升级同 major；升级前 snapshot，失败回滚
+5) 检查复盘、生成技能、隔离/清理和工具安装结果
+6) 输出 ≤12 行摘要：自更新、环境分数、复盘提案、生成/隔离/清理、插件、错误、下周 1-3 个动作
 边界：付费、外发敏感数据、跨 major、未备份删除、删除用户手写技能停止；测试失败不得保留新版本；不伪造结果。
 ```
 
